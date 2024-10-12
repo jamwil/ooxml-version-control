@@ -1,0 +1,16 @@
+name: Rust CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Install Tarpaulin
+      run: cargo install cargo-tarpaulin
+    - name: Run Tests with Coverage
+      # https://github.com/xd009642/tarpaulin/issues/903#issuecomment-996843327
+      run: cargo tarpaulin --include-tests --fail-under 100 --follow-exec
