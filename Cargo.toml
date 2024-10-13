@@ -10,7 +10,10 @@ zip = "2.2.0"
 tempfile = "3.13.0"
 log = "0.4.22"
 env_logger = "0.11.5"
+quick-xml = { version = "0.36.2", features = ["serialize"] }
+serde = { version = "1.0.210", features = ["derive"] }
 
 [dev-dependencies]
 assert_cmd = "2.0.16"
 predicates = "3.1.2"
+test-log = "0.2.16"

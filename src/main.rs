@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
-use ooxml_version_control::{copy_dir, unzip, zip};
+use env_logger::{self, Env};
+use ooxml_version_control::filesystem;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
@@ -28,7 +29,8 @@ enum Commands {
 }
 
 fn main() {
-    env_logger::init();
+    let env = Env::default().filter_or("MY_LOG_LEVEL", "info");
+    env_logger::init_from_env(env);
     log::info!("Starting ooxml-version-control");
 
     let cli = Cli::parse();
@@ -48,9 +50,9 @@ fn main() {
                     let work_dir = tempdir().unwrap().path().to_path_buf();
                     log::trace!("Temporary Work dir: {:?}", work_dir);
 
-                    unzip(&path, &work_dir);
+                    filesystem::unzip(&path, &work_dir);
                     // TODO: Manipulation of files
-                    copy_dir(&work_dir, &output_dir);
+                    filesystem::copy_dir(&work_dir, &output_dir);
 
                     log::info!("Checked in: {:?}", output_dir);
                 } else {
@@ -70,7 +72,8 @@ fn main() {
                         path.with_file_name(input_dir.to_string().replace("_ooxml", ""));
                     log::debug!("File name: {:?}", output_file);
 
-                    zip(&path, &output_file);
+                    filesystem::zip(&path, &output_file);
+
                     log::info!("Checked out: {:?}", output_file);
                 } else {
                     panic!("Error: Path is not a valid file: {:?}", path);

@@ -1,5 +1,5 @@
 use assert_cmd::Command;
-use ooxml_version_control::copy_dir;
+use ooxml_version_control::filesystem;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
@@ -75,7 +75,7 @@ fn test_check_out_with_valid_file() {
     {
         let temp_dir = tempdir().unwrap();
         test_folder_path = temp_dir.path().join("simple_book.xlsx_ooxml");
-        copy_dir(&fixture, &test_folder_path);
+        filesystem::copy_dir(&fixture, &test_folder_path);
 
         cmd.arg("check-out")
             .arg(&test_folder_path)
