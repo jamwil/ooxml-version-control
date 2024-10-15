@@ -31,7 +31,9 @@ pub mod schemas {
     }
 }
 
-fn read_xml_file<T: DeserializeOwned>(file_path: &str) -> Result<T, Box<dyn std::error::Error>> {
+pub fn read_xml_file<T: DeserializeOwned>(
+    file_path: &str,
+) -> Result<T, Box<dyn std::error::Error>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
     let result: T = from_reader(reader).unwrap();
@@ -39,7 +41,7 @@ fn read_xml_file<T: DeserializeOwned>(file_path: &str) -> Result<T, Box<dyn std:
     Ok(result)
 }
 
-fn _write_xml_file<T: Serialize>(
+pub fn write_xml_file<T: Serialize>(
     file_path: &PathBuf,
     value: &T,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -54,32 +56,95 @@ fn _write_xml_file<T: Serialize>(
     Ok(())
 }
 
-pub fn inline_strings(
-    shared_strings_file_path: &str,
-    target_file_path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let sst: schemas::shared_strings::Sst = read_xml_file(shared_strings_file_path)?;
+pub fn start_xml_buffer(file_path: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut output = Vec::new();
+    let mut writer = Writer::new(Cursor::new(&mut output));
 
-    let mut reader = Reader::from_file(target_file_path)?;
+    let mut reader = Reader::from_file(file_path)?;
+    reader.config_mut().trim_text(true);
+
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf).unwrap() {
+            Event::Eof => break,
+            event => writer.write_event(event.to_owned()).unwrap(),
+        }
+        buf.clear();
+    }
+    buf.clear();
+
+    Ok(output)
+}
+
+pub fn finish_xml_buffer(
+    input_buffer: &[u8],
+    file_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut reader = Reader::from_reader(input_buffer);
     reader.config_mut().trim_text(true);
 
     let mut output = Vec::new();
     let mut writer = Writer::new_with_indent(Cursor::new(&mut output), b' ', 4);
-    writer.write_event(Event::Decl(BytesDecl::new(
-        "1.0",
-        Some("UTF-8"),
-        Some("yes"),
-    )))?;
+    writer
+        .write_event(Event::Decl(BytesDecl::new(
+            "1.0",
+            Some("UTF-8"),
+            Some("yes"),
+        )))
+        .unwrap();
 
-    let mut buf = Vec::new();
+    loop {
+        match reader.read_event().unwrap() {
+            Event::Eof => break,
+            event => writer.write_event(event.to_owned()).unwrap(),
+        }
+    }
+
+    let file = File::create(file_path)?;
+    let mut writer = BufWriter::new(file);
+    writer.write_all(&output)?;
+
+    Ok(())
+}
+
+pub fn tidy(input_buffer: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut reader = Reader::from_reader(input_buffer);
+
+    let mut output = Vec::new();
+    let mut writer = Writer::new(Cursor::new(&mut output));
+
+    loop {
+        match reader.read_event().unwrap() {
+            Event::Eof => break,
+            Event::CData(_)
+            | Event::Comment(_)
+            | Event::Decl(_)
+            | Event::PI(_)
+            | Event::DocType(_) => {}
+            event => writer.write_event(event.to_owned()).unwrap(),
+        }
+    }
+
+    Ok(output)
+}
+
+pub fn inline_shared_strings(
+    input_buffer: &[u8],
+    sst: &schemas::shared_strings::Sst,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut reader = Reader::from_reader(input_buffer);
+
+    let mut output = Vec::new();
+    let mut writer = Writer::new(Cursor::new(&mut output));
+
     let mut in_t_cell = false;
     let mut in_t_cell_value = false;
     let mut cell_ref = None;
     let mut ss_index = None;
 
     loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => match e.name().as_ref() {
+        match reader.read_event().unwrap() {
+            Event::Start(e) => match e.name().as_ref() {
                 b"c" => {
                     let attributes = e.attributes().map(|a| a.unwrap()).collect::<Vec<_>>();
                     let attributes = attributes
@@ -114,18 +179,18 @@ pub fn inline_strings(
                     log::trace!("Wrote start event: {:?}", e);
                 }
             },
-            Ok(Event::Text(e)) if in_t_cell_value => {
+            Event::Text(e) if in_t_cell_value => {
                 let cell_value = e.unescape().unwrap();
                 ss_index = Some(cell_value.parse::<usize>().unwrap());
                 log::trace!("Shared string index: {:?}", ss_index);
                 let si = &sst.si[ss_index.unwrap()];
                 log::trace!("Shared string value: {:?}", si.t);
             }
-            Ok(Event::Text(e)) => {
+            Event::Text(e) => {
                 writer.write_event(Event::Text(e.to_owned()))?;
                 log::trace!("Wrote text event: {:?}", e);
             }
-            Ok(Event::End(e)) => match e.name().as_ref() {
+            Event::End(e) => match e.name().as_ref() {
                 b"v" => {
                     if in_t_cell_value {
                         in_t_cell_value = false;
@@ -161,22 +226,16 @@ pub fn inline_strings(
                     log::trace!("Wrote end event: {:?}", e);
                 }
             },
-            Ok(Event::Empty(e)) => {
+            Event::Empty(e) => {
                 writer.write_event(Event::Empty(e.to_owned()))?;
                 log::trace!("Wrote empty event: {:?}", e);
             }
-            Ok(Event::Eof) => break,
-            _ => {}
+            Event::Eof => break,
+            event => writer.write_event(event.to_owned()).unwrap(),
         }
-        buf.clear();
     }
-    buf.clear();
 
-    let output_file = File::create(target_file_path)?;
-    let mut file_writer = BufWriter::new(output_file);
-    file_writer.write_all(&output)?;
-
-    Ok(())
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -339,7 +398,7 @@ mod tests {
         let worksheet: test_schemas::worksheets::Worksheet =
             read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/worksheets/sheet1.xml")
                 .unwrap();
-        _write_xml_file(&output_file, &worksheet).unwrap();
+        write_xml_file(&output_file, &worksheet).unwrap();
         let output_file_path = output_file.to_str().unwrap();
         let new_worksheet: test_schemas::worksheets::Worksheet =
             read_xml_file(&output_file_path).unwrap();
@@ -354,13 +413,13 @@ mod tests {
         let output_file_path = temp_dir.path().join("sheet1.xml");
         fs::copy(&fixture, &output_file_path).unwrap();
 
-        inline_strings(
-            "tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml",
-            output_file_path.to_str().unwrap(),
-        )
-        .unwrap();
+        let sst: schemas::shared_strings::Sst =
+            read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();
 
-        fs::copy(&output_file_path, PathBuf::from(".debug/out.xml")).unwrap();
+        let mut buffer = start_xml_buffer(output_file_path.to_str().unwrap()).unwrap();
+        buffer = tidy(&buffer).unwrap();
+        buffer = inline_shared_strings(&buffer, &sst).unwrap();
+        finish_xml_buffer(&buffer, output_file_path.to_str().unwrap()).unwrap();
 
         let new_worksheet: test_schemas::worksheets::Worksheet =
             read_xml_file(&output_file_path.to_str().unwrap()).unwrap();
