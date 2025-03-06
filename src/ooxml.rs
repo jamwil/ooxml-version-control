@@ -56,7 +56,7 @@ pub fn write_xml_file<T: Serialize>(
     Ok(())
 }
 
-struct OoxmlBuffer {
+pub struct OoxmlBuffer {
     buffer: Vec<u8>,
     file_path: PathBuf,
 }

@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use env_logger::{self, Env};
 use ooxml_version_control::filesystem;
+use ooxml_version_control::ooxml::OoxmlBuffer;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
@@ -51,7 +52,21 @@ fn main() {
                     log::trace!("Temporary Work dir: {:?}", work_dir);
 
                     filesystem::unzip(&path, &work_dir);
-                    // TODO: Manipulation of files
+
+                    // Process all XML files in work directory
+                    let xml_files = filesystem::collect_files(&work_dir, "**/*.xml");
+                    for xml_file in xml_files {
+                        log::debug!("Tidying XML file: {:?}", xml_file);
+                        OoxmlBuffer::new(xml_file.to_str().unwrap())
+                            .unwrap()
+                            .tidy()
+                            .unwrap()
+                            .save()
+                            .unwrap();
+                    }
+
+                    // TODO: Work inline strings into this
+
                     filesystem::copy_dir(&work_dir, &output_dir);
 
                     log::info!("Checked in: {:?}", output_dir);
