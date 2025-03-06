@@ -1,3 +1,4 @@
+use glob::glob;
 use std::fs::{self, File};
 use std::io;
 use std::path::PathBuf;
@@ -62,6 +63,13 @@ pub fn copy_dir(input_dir: &PathBuf, output_dir: &PathBuf) -> () {
     }
 
     log::debug!("Copied directory {:?} to {:?}", input_dir, output_dir);
+}
+
+/// Collect all files in a glob pattern
+pub fn collect_files(dir: &PathBuf, pattern: &str) -> Vec<PathBuf> {
+    let pattern = dir.join(pattern);
+    let pattern = pattern.to_str().unwrap();
+    glob(pattern).unwrap().filter_map(Result::ok).collect()
 }
 
 #[cfg(test)]
