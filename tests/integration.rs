@@ -46,6 +46,12 @@ fn test_check_in_with_valid_file() {
             let path = output_dir_2.join(expected_file);
             assert_eq!(path.is_file(), true);
         }
+
+        let calc_chain_path_1 = output_dir_1.join("xl/calcChain.xml");
+        assert!(!calc_chain_path_1.exists(), "calcChain.xml should not exist in output 1");
+
+        let calc_chain_path_2 = output_dir_2.join("xl/calcChain.xml");
+        assert!(!calc_chain_path_2.exists(), "calcChain.xml should not exist in output 2");
     }
 
     assert_ne!(output_dir_1.is_dir(), true);

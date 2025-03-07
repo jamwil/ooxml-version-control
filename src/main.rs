@@ -3,6 +3,7 @@ use env_logger::{self, Env};
 use ooxml_version_control::filesystem;
 use ooxml_version_control::ooxml::OoxmlBuffer;
 use std::path::PathBuf;
+use std::fs::remove_file;
 use tempfile::tempdir;
 
 #[derive(Parser)]
@@ -52,6 +53,16 @@ fn main() {
                     log::trace!("Temporary Work dir: {:?}", work_dir);
 
                     filesystem::unzip(&path, &work_dir);
+
+                    // Drop the files we don't want to keep
+                    let unwanted_files = vec!["xl/calcChain.xml"];
+                    for unwanted_file in unwanted_files {
+                        let unwanted_file_path = work_dir.join(unwanted_file);
+                        if unwanted_file_path.exists() {
+                            log::debug!("Removing unwanted file: {:?}", unwanted_file_path);
+                            remove_file(unwanted_file_path).unwrap();
+                        }
+                    }
 
                     // Process all XML files in work directory
                     let xml_files = filesystem::collect_files(&work_dir, "**/*.xml");
