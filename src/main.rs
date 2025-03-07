@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use env_logger::{self, Env};
 use ooxml_version_control::filesystem;
-use ooxml_version_control::ooxml::OoxmlBuffer;
+use ooxml_version_control::ooxml::{OoxmlBuffer, read_xml_file};
+use ooxml_version_control::ooxml::schemas::shared_strings;
 use std::path::PathBuf;
 use std::fs::remove_file;
 use tempfile::tempdir;
@@ -64,16 +65,20 @@ fn main() {
                         }
                     }
 
+                    // Get the shared strings
+                    let ss_file = work_dir.join("xl/sharedStrings.xml");
+                    let sst: shared_strings::Sst =
+                        read_xml_file(ss_file.to_str().unwrap()).unwrap();
+
                     // Process all XML files in work directory
                     let xml_files = filesystem::collect_files(&work_dir, "**/*.xml");
                     for xml_file in xml_files {
                         log::debug!("Tidying XML file: {:?}", xml_file);
                         OoxmlBuffer::new(xml_file.to_str().unwrap())
                             .tidy()
+                            .inline_shared_strings(&sst)
                             .save();
                     }
-
-                    // TODO: Work inline strings into this
 
                     filesystem::copy_dir(&work_dir, &output_dir);
 
