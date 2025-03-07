@@ -58,11 +58,8 @@ fn main() {
                     for xml_file in xml_files {
                         log::debug!("Tidying XML file: {:?}", xml_file);
                         OoxmlBuffer::new(xml_file.to_str().unwrap())
-                            .unwrap()
                             .tidy()
-                            .unwrap()
-                            .save()
-                            .unwrap();
+                            .save();
                     }
 
                     // TODO: Work inline strings into this

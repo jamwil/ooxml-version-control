@@ -62,53 +62,53 @@ pub struct OoxmlBuffer {
 }
 
 impl OoxmlBuffer {
-    pub fn new(file_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(file_path: &str) -> Self {
         let mut output = Vec::new();
         let mut writer = Writer::new(Cursor::new(&mut output));
 
-        let mut reader = Reader::from_file(file_path)?;
+        let mut reader = Reader::from_file(file_path).unwrap();
         reader.config_mut().trim_text(true);
 
         let mut buf = Vec::new();
         loop {
-            match reader.read_event_into(&mut buf)? {
+            match reader.read_event_into(&mut buf).unwrap() {
                 Event::Eof => break,
-                event => writer.write_event(event)?,
+                event => writer.write_event(event).unwrap(),
             }
             buf.clear();
         }
 
-        Ok(Self {
+        Self {
             buffer: output,
             file_path: PathBuf::from(file_path),
-        })
+        }
     }
 
-    pub fn tidy(mut self) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn tidy(mut self) -> Self {
         let mut reader = Reader::from_reader(&self.buffer[..]);
         let mut output = Vec::new();
         let mut writer = Writer::new(Cursor::new(&mut output));
 
         loop {
-            match reader.read_event()? {
+            match reader.read_event().unwrap() {
                 Event::Eof => break,
                 Event::CData(_)
                 | Event::Comment(_)
                 | Event::Decl(_)
                 | Event::PI(_)
                 | Event::DocType(_) => {}
-                event => writer.write_event(event)?,
+                event => writer.write_event(event).unwrap(),
             }
         }
 
         self.buffer = output;
-        Ok(self)
+        self
     }
 
     pub fn inline_shared_strings(
         mut self,
         sst: &schemas::shared_strings::Sst,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Self {
         let mut reader = Reader::from_reader(&self.buffer[..]);
         let mut output = Vec::new();
         let mut writer = Writer::new(Cursor::new(&mut output));
@@ -119,10 +119,10 @@ impl OoxmlBuffer {
         let mut ss_index = None;
 
         loop {
-            match reader.read_event()? {
+            match reader.read_event().unwrap() {
                 Event::Start(e) => match e.name().as_ref() {
                     b"c" => {
-                        let attributes = e.attributes().collect::<Result<Vec<_>, _>>()?;
+                        let attributes = e.attributes().collect::<Result<Vec<_>, _>>().unwrap();
                         let attributes = attributes
                             .iter()
                             .map(|a| (a.key.as_ref(), a.unescape_value().unwrap()))
@@ -134,74 +134,74 @@ impl OoxmlBuffer {
                                 cell_ref = Some(
                                     attributes
                                         .get(b"r".as_ref())
-                                        .ok_or("Missing 'r' attribute")?
+                                        .expect("Missing 'r' attribute")
                                         .to_string(),
                                 );
                             } else {
-                                writer.write_event(Event::Start(e.to_owned()))?;
+                                writer.write_event(Event::Start(e.to_owned())).unwrap();
                             }
                         } else {
-                            writer.write_event(Event::Start(e.to_owned()))?;
+                            writer.write_event(Event::Start(e.to_owned())).unwrap();
                         }
                     }
                     b"v" => {
                         if in_t_cell {
                             in_t_cell_value = true;
                         } else {
-                            writer.write_event(Event::Start(e.to_owned()))?;
+                            writer.write_event(Event::Start(e.to_owned())).unwrap();
                         }
                     }
-                    _ => writer.write_event(Event::Start(e.to_owned()))?,
+                    _ => writer.write_event(Event::Start(e.to_owned())).unwrap(),
                 },
                 Event::Text(e) if in_t_cell_value => {
-                    let cell_value = e.unescape()?;
-                    ss_index = Some(cell_value.parse::<usize>()?);
+                    let cell_value = e.unescape().unwrap();
+                    ss_index = Some(cell_value.parse::<usize>().unwrap());
                 }
-                Event::Text(e) => writer.write_event(Event::Text(e.to_owned()))?,
+                Event::Text(e) => writer.write_event(Event::Text(e.to_owned())).unwrap(),
                 Event::End(e) => match e.name().as_ref() {
                     b"v" => {
                         if in_t_cell_value {
                             in_t_cell_value = false;
                         } else {
-                            writer.write_event(Event::End(e.to_owned()))?;
+                            writer.write_event(Event::End(e.to_owned())).unwrap();
                         }
                     }
                     b"c" => {
                         if in_t_cell {
-                            let index = ss_index.ok_or("Missing shared string index")?;
+                            let index = ss_index.expect("Missing shared string index");
                             let mut c_element = BytesStart::new("c");
                             c_element.push_attribute((
                                 "r",
-                                cell_ref.as_ref().ok_or("Missing cell ref")?.as_str(),
+                                cell_ref.as_ref().expect("Missing cell ref").as_str(),
                             ));
                             c_element.push_attribute(("t", "inlineStr"));
-                            writer.write_event(Event::Start(c_element))?;
-                            writer.write_event(Event::Start(BytesStart::new("is")))?;
-                            writer.write_event(Event::Start(BytesStart::new("t")))?;
-                            writer.write_event(Event::Text(BytesText::new(&sst.si[index].t)))?;
-                            writer.write_event(Event::End(BytesEnd::new("t")))?;
-                            writer.write_event(Event::End(BytesEnd::new("is")))?;
-                            writer.write_event(Event::End(BytesEnd::new("c")))?;
+                            writer.write_event(Event::Start(c_element)).unwrap();
+                            writer.write_event(Event::Start(BytesStart::new("is"))).unwrap();
+                            writer.write_event(Event::Start(BytesStart::new("t"))).unwrap();
+                            writer.write_event(Event::Text(BytesText::new(&sst.si[index].t))).unwrap();
+                            writer.write_event(Event::End(BytesEnd::new("t"))).unwrap();
+                            writer.write_event(Event::End(BytesEnd::new("is"))).unwrap();
+                            writer.write_event(Event::End(BytesEnd::new("c"))).unwrap();
                             ss_index = None;
                             cell_ref = None;
                             in_t_cell = false;
                         } else {
-                            writer.write_event(Event::End(e.to_owned()))?;
+                            writer.write_event(Event::End(e.to_owned())).unwrap();
                         }
                     }
-                    _ => writer.write_event(Event::End(e.to_owned()))?,
+                    _ => writer.write_event(Event::End(e.to_owned())).unwrap(),
                 },
-                Event::Empty(e) => writer.write_event(Event::Empty(e.to_owned()))?,
+                Event::Empty(e) => writer.write_event(Event::Empty(e.to_owned())).unwrap(),
                 Event::Eof => break,
-                event => writer.write_event(event)?,
+                event => writer.write_event(event).unwrap(),
             }
         }
 
         self.buffer = output;
-        Ok(self)
+        self
     }
 
-    pub fn save(self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save(self) {
         let mut reader = Reader::from_reader(&self.buffer[..]);
         let mut output = Vec::new();
         let mut writer = Writer::new_with_indent(Cursor::new(&mut output), b' ', 4);
@@ -210,17 +210,16 @@ impl OoxmlBuffer {
             "1.0",
             Some("UTF-8"),
             Some("yes"),
-        )))?;
+        ))).unwrap();
 
         loop {
-            match reader.read_event()? {
+            match reader.read_event().unwrap() {
                 Event::Eof => break,
-                event => writer.write_event(event)?,
+                event => writer.write_event(event).unwrap(),
             }
         }
 
-        std::fs::write(&self.file_path, output)?;
-        Ok(())
+        std::fs::write(&self.file_path, output).unwrap();
     }
 }
 
@@ -393,28 +392,27 @@ mod tests {
     }
 
     #[test]
-    fn test_inline_strings() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_inline_strings() {
         let fixture =
             PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml/xl/worksheets/sheet1.xml");
-        let temp_dir = tempdir()?;
+        let temp_dir = tempdir().unwrap();
         let output_file_path = temp_dir.path().join("sheet1.xml");
-        fs::copy(&fixture, &output_file_path)?;
+        fs::copy(&fixture, &output_file_path).unwrap();
 
         let sst: schemas::shared_strings::Sst =
-            read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml")?;
+            read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();
 
-        OoxmlBuffer::new(output_file_path.to_str().unwrap())?
-            .tidy()?
-            .inline_shared_strings(&sst)?
-            .save()?;
+        OoxmlBuffer::new(output_file_path.to_str().unwrap())
+            .tidy()
+            .inline_shared_strings(&sst)
+            .save();
 
         let new_worksheet: test_schemas::worksheets::Worksheet =
-            read_xml_file(output_file_path.to_str().unwrap())?;
+            read_xml_file(output_file_path.to_str().unwrap()).unwrap();
 
         assert_eq!(
             new_worksheet.sheet_data.row[0].c[0].is.as_ref().unwrap().t,
             "Hello"
         );
-        Ok(())
     }
 }
