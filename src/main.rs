@@ -67,8 +67,14 @@ fn main() {
 
                     // Get the shared strings
                     let ss_file = work_dir.join("xl/sharedStrings.xml");
+                    let default_sst = shared_strings::Sst {
+                        xmlns: String::from("http://schemas.openxmlformats.org/spreadsheetml/2006/main"),
+                        count: String::from("0"),
+                        unique_count: String::from("0"),
+                        si: vec![],
+                    };
                     let sst: shared_strings::Sst =
-                        read_xml_file(ss_file.to_str().unwrap()).unwrap();
+                        read_xml_file(ss_file.to_str().unwrap()).unwrap_or(default_sst);
 
                     // Process all XML files in work directory
                     let xml_files = filesystem::collect_files(&work_dir, "**/*.xml");

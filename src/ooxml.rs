@@ -1,12 +1,10 @@
 use quick_xml::de::from_reader;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-use quick_xml::se::Serializer;
 use quick_xml::{Reader, Writer};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Cursor, Write};
+use std::io::{self, BufReader, Cursor};
 use std::path::PathBuf;
 
 pub mod schemas {
@@ -33,27 +31,12 @@ pub mod schemas {
 
 pub fn read_xml_file<T: DeserializeOwned>(
     file_path: &str,
-) -> Result<T, Box<dyn std::error::Error>> {
+) -> Result<T, io::Error> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
     let result: T = from_reader(reader).unwrap();
 
     Ok(result)
-}
-
-pub fn write_xml_file<T: Serialize>(
-    file_path: &PathBuf,
-    value: &T,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut xml_string = String::new();
-
-    let serializer = Serializer::new(&mut xml_string);
-    value.serialize(serializer)?;
-
-    let mut file = File::create(file_path)?;
-    file.write_all(&xml_string.into_bytes())?;
-
-    Ok(())
 }
 
 pub struct OoxmlBuffer {
@@ -105,10 +88,7 @@ impl OoxmlBuffer {
         self
     }
 
-    pub fn inline_shared_strings(
-        mut self,
-        sst: &schemas::shared_strings::Sst,
-    ) -> Self {
+    pub fn inline_shared_strings(mut self, sst: &schemas::shared_strings::Sst) -> Self {
         let mut reader = Reader::from_reader(&self.buffer[..]);
         let mut output = Vec::new();
         let mut writer = Writer::new(Cursor::new(&mut output));
@@ -176,9 +156,15 @@ impl OoxmlBuffer {
                             ));
                             c_element.push_attribute(("t", "inlineStr"));
                             writer.write_event(Event::Start(c_element)).unwrap();
-                            writer.write_event(Event::Start(BytesStart::new("is"))).unwrap();
-                            writer.write_event(Event::Start(BytesStart::new("t"))).unwrap();
-                            writer.write_event(Event::Text(BytesText::new(&sst.si[index].t))).unwrap();
+                            writer
+                                .write_event(Event::Start(BytesStart::new("is")))
+                                .unwrap();
+                            writer
+                                .write_event(Event::Start(BytesStart::new("t")))
+                                .unwrap();
+                            writer
+                                .write_event(Event::Text(BytesText::new(&sst.si[index].t)))
+                                .unwrap();
                             writer.write_event(Event::End(BytesEnd::new("t"))).unwrap();
                             writer.write_event(Event::End(BytesEnd::new("is"))).unwrap();
                             writer.write_event(Event::End(BytesEnd::new("c"))).unwrap();
@@ -206,11 +192,13 @@ impl OoxmlBuffer {
         let mut output = Vec::new();
         let mut writer = Writer::new_with_indent(Cursor::new(&mut output), b' ', 4);
 
-        writer.write_event(Event::Decl(BytesDecl::new(
-            "1.0",
-            Some("UTF-8"),
-            Some("yes"),
-        ))).unwrap();
+        writer
+            .write_event(Event::Decl(BytesDecl::new(
+                "1.0",
+                Some("UTF-8"),
+                Some("yes"),
+            )))
+            .unwrap();
 
         loop {
             match reader.read_event().unwrap() {
@@ -222,7 +210,6 @@ impl OoxmlBuffer {
         std::fs::write(&self.file_path, output).unwrap();
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -367,6 +354,21 @@ mod tests {
     }
 
     #[test]
+    fn test_read_shared_strings_with_non_existant_file() {
+        let default_sst = schemas::shared_strings::Sst {
+            xmlns: String::from("http://schemas.openxmlformats.org/spreadsheetml/2006/main"),
+            count: String::from("0"),
+            unique_count: String::from("0"),
+            si: vec![],
+        };
+        let sst: schemas::shared_strings::Sst = 
+            read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/oops.xml").unwrap_or(default_sst);
+        assert_eq!(sst.count, "0");
+        assert_eq!(sst.unique_count, "0");
+        assert_eq!(sst.si.len(), 0);
+    }
+
+    #[test]
     fn test_read_sheet() {
         let worksheet: test_schemas::worksheets::Worksheet =
             read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/worksheets/sheet1.xml")
@@ -375,20 +377,6 @@ mod tests {
         assert_eq!(worksheet.sheet_data.row[0].r, "1");
         assert_eq!(worksheet.sheet_data.row[0].spans, "1:1");
         assert_eq!(worksheet.sheet_data.row[0].c[0].t, Some("s".to_string()));
-    }
-
-    #[test]
-    fn test_write_sheet() {
-        let output_dir = tempdir().unwrap();
-        let output_file = output_dir.path().join("sheet1.xml");
-        let worksheet: test_schemas::worksheets::Worksheet =
-            read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/worksheets/sheet1.xml")
-                .unwrap();
-        write_xml_file(&output_file, &worksheet).unwrap();
-        let output_file_path = output_file.to_str().unwrap();
-        let new_worksheet: test_schemas::worksheets::Worksheet =
-            read_xml_file(&output_file_path).unwrap();
-        assert_eq!(new_worksheet.sheet_data.row[0].c[0].t.is_some(), true);
     }
 
     #[test]
