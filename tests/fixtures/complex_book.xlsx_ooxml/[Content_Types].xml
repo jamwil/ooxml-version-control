@@ -1,10 +1,20 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml" />
   <Default
     Extension="rels"
     ContentType="application/vnd.openxmlformats-package.relationships+xml"
   />
-  <Default Extension="xml" ContentType="application/xml" />
+  <Default Extension="png" ContentType="image/png" />
+  <Default Extension="jpeg" ContentType="image/jpeg" />
+  <Override
+    PartName="/_rels/.rels"
+    ContentType="application/vnd.openxmlformats-package.relationships+xml"
+  />
+  <Override
+    PartName="/xl/_rels/workbook.xml.rels"
+    ContentType="application/vnd.openxmlformats-package.relationships+xml"
+  />
   <Override
     PartName="/xl/workbook.xml"
     ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
@@ -18,20 +28,12 @@
     ContentType="application/vnd.openxmlformats-officedocument.theme+xml"
   />
   <Override
-    PartName="/xl/styles.xml"
-    ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"
-  />
-  <Override
     PartName="/xl/sharedStrings.xml"
     ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"
   />
   <Override
-    PartName="/xl/calcChain.xml"
-    ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"
-  />
-  <Override
-    PartName="/docMetadata/LabelInfo.xml"
-    ContentType="application/vnd.ms-office.classificationlabels+xml"
+    PartName="/xl/styles.xml"
+    ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"
   />
   <Override
     PartName="/docProps/core.xml"

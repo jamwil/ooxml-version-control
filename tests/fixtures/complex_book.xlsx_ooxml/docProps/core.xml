@@ -6,17 +6,17 @@
   xmlns:dcmitype="http://purl.org/dc/dcmitype/"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 >
-  <dc:title />
-  <dc:subject />
-  <dc:creator>Williams, James @CBRE VAS Canada</dc:creator>
-  <dc:description />
-  <cp:lastModifiedBy>Williams, James @CBRE VAS Canada</cp:lastModifiedBy>
-  <cp:revision>0</cp:revision>
   <dcterms:created
     xsi:type="dcterms:W3CDTF"
-  >2024-10-10T21:11:59Z</dcterms:created>
+  >2025-04-12T20:11:07Z</dcterms:created>
+  <dc:creator>James Williams</dc:creator>
+  <dc:description />
+  <dc:language>en-CA</dc:language>
+  <cp:lastModifiedBy>James Williams</cp:lastModifiedBy>
   <dcterms:modified
     xsi:type="dcterms:W3CDTF"
-  >2024-10-14T23:29:45Z</dcterms:modified>
-  <dc:language>en-CA</dc:language>
+  >2025-04-12T20:13:20Z</dcterms:modified>
+  <cp:revision>1</cp:revision>
+  <dc:subject />
+  <dc:title />
 </cp:coreProperties>
