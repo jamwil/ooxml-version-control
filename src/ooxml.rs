@@ -14,14 +14,10 @@ pub mod schemas {
 
         #[derive(Serialize, Deserialize, Debug, Clone)]
         pub struct Text {
-            #[serde(rename = "$value", default)]
+            #[serde(rename = "$text")]
             pub text: String,
-            #[serde(default = "default_preserve", rename = "@xml:space")]
-            pub xml_space: String,
-        }
-
-        fn default_preserve() -> String {
-            "preserve".to_string()
+            #[serde(rename = "@xml:space")]
+            pub xml_space: Option<String>,
         }
 
         #[derive(Serialize, Deserialize, Debug)]
@@ -588,6 +584,32 @@ mod tests {
                 .t
                 .text,
             "fun "
+        );
+
+        assert_eq!(
+            new_worksheet.sheet_data.row[1].c[3]
+                .is
+                .as_ref()
+                .unwrap()
+                .r
+                .as_ref()
+                .unwrap()[1]
+                .t
+                .text,
+            "and"
+        );
+
+        assert_eq!(
+            new_worksheet.sheet_data.row[1].c[3]
+                .is
+                .as_ref()
+                .unwrap()
+                .r
+                .as_ref()
+                .unwrap()[2]
+                .t
+                .text,
+            " "
         );
     }
 }
