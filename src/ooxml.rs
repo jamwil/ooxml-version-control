@@ -151,8 +151,7 @@ impl OoxmlBuffer {
         loop {
             match reader.read_event().unwrap() {
                 Event::Eof => break,
-                Event::CData(_)
-                | Event::Comment(_)
+                Event::Comment(_)
                 | Event::Decl(_)
                 | Event::PI(_)
                 | Event::DocType(_) => {}
