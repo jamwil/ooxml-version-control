@@ -14,6 +14,9 @@ quick-xml = { version = "0.38.3", features = ["serialize"] }
 serde = { version = "1.0.219", features = ["derive"] }
 glob = "0.3.3"
 
+[patch.crates-io]
+quick-xml = { path = "../quick-xml/" }
+
 [dev-dependencies]
 assert_cmd = "2.0.17"
 predicates = "3.1.3"
