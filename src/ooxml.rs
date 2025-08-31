@@ -3,7 +3,6 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::se::to_utf8_io_writer;
 use quick_xml::{Reader, Writer};
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufReader, Cursor};
 use std::path::PathBuf;
@@ -151,10 +150,7 @@ impl OoxmlBuffer {
         loop {
             match reader.read_event().unwrap() {
                 Event::Eof => break,
-                Event::Comment(_)
-                | Event::Decl(_)
-                | Event::PI(_)
-                | Event::DocType(_) => {}
+                Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {}
                 event => writer.write_event(event).unwrap(),
             }
         }
@@ -179,7 +175,7 @@ impl OoxmlBuffer {
 
         let mut in_target_cell = false; // set to true when cell type is 's', i.e., shared string
         let mut in_target_cell_value = false;
-        let mut cell_ref = None; // stores the value of the current cell reference (address)
+        let mut cell_attrs: Option<Vec<(Vec<u8>, String)>> = None; // stores original attributes as owned key/value pairs
         let mut ss_index = None; // stores the value of the current shared string index
 
         loop {
@@ -188,33 +184,34 @@ impl OoxmlBuffer {
                 Event::Start(e) => match e.name().as_ref() {
                     // Match the start of a cell block
                     b"c" => {
-                        // Collect the cell attributes into a HashMap
-                        let attributes = e.attributes().collect::<Result<Vec<_>, _>>().unwrap();
-                        let attributes = attributes
-                            .iter()
-                            .map(|a| (a.key.as_ref(), a.unescape_value().unwrap()))
-                            .collect::<HashMap<_, _>>();
+                        // Collect the cell attributes into an owned Vec of (key, value) pairs
+                        let raw_attributes = e.attributes().collect::<Result<Vec<_>, _>>().unwrap();
+                        let attrs_pairs = raw_attributes
+                            .into_iter()
+                            .map(|a| {
+                                (
+                                    a.key.as_ref().to_vec(),
+                                    a.unescape_value().unwrap().into_owned(),
+                                )
+                            })
+                            .collect::<Vec<(Vec<u8>, String)>>();
 
-                        // We'll put up a guard to verify the cell has a 't' attribute (type)
-                        if let Some(cell_type) = attributes.get(b"t".as_ref()) {
-                            // We have a cell type but we don't know it yet
-                            // Let's see if it's an 's' type, indicating a shared string
-                            if cell_type.as_ref() == "s" {
-                                // It is a shared string, let's adjust our state so we know
-                                // to write our own tags on the next iteration of the loop
+                        // Look for a 't' (type) attribute
+                        if let Some((_, cell_type)) =
+                            attrs_pairs.iter().find(|(k, _)| k.as_slice() == b"t")
+                        {
+                            // Shared-string cells have type 's'
+                            if cell_type.as_str() == "s" {
                                 in_target_cell = true;
-                                cell_ref = Some(
-                                    attributes
-                                        .get(b"r".as_ref())
-                                        .expect("Missing 'r' attribute")
-                                        .to_string(),
-                                );
+
+                                // Preserve attributes for later reuse
+                                cell_attrs = Some(attrs_pairs);
                             } else {
-                                // Cell is of some other type; write the event
+                                // Non shared-string cell – write unchanged
                                 writer.write_event(Event::Start(e.to_owned())).unwrap();
                             }
                         } else {
-                            // There is no cell type attribute; write the event
+                            // No type attribute – write unchanged
                             writer.write_event(Event::Start(e.to_owned())).unwrap();
                         }
                     }
@@ -265,10 +262,20 @@ impl OoxmlBuffer {
 
                             // Construct and write a new 'c' (cell) element
                             let mut c_element = BytesStart::new("c");
-                            c_element.push_attribute((
-                                "r",
-                                cell_ref.as_ref().expect("Missing cell ref").as_str(),
-                            ));
+
+                            // Copy all original attributes back except the "t" attribute
+                            if let Some(attrs) = cell_attrs.as_ref() {
+                                for (k, v) in attrs {
+                                    if k.as_slice() == b"t" {
+                                        continue;
+                                    }
+                                    let key = std::str::from_utf8(k)
+                                        .expect("Invalid UTF-8 in attribute name");
+                                    c_element.push_attribute((key, v.as_str()));
+                                }
+                            }
+
+                            // Replace the type with inlineStr
                             c_element.push_attribute(("t", "inlineStr"));
                             writer.write_event(Event::Start(c_element)).unwrap();
 
@@ -300,7 +307,7 @@ impl OoxmlBuffer {
 
                             // Reset the state
                             ss_index = None;
-                            cell_ref = None;
+                            cell_attrs = None;
                             in_target_cell = false;
                         } else {
                             // We're not in a target cell; just write and continue

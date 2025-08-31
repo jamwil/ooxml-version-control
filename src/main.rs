@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand};
 use env_logger::{self, Env};
 use ooxml_version_control::filesystem;
-use ooxml_version_control::ooxml::{OoxmlBuffer, read_xml_file};
 use ooxml_version_control::ooxml::schemas::shared_strings;
-use std::path::PathBuf;
+use ooxml_version_control::ooxml::{read_xml_file, OoxmlBuffer};
 use std::fs::remove_file;
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[derive(Parser)]
@@ -68,7 +68,9 @@ fn main() {
                     // Get the shared strings
                     let ss_file = work_dir.join("xl/sharedStrings.xml");
                     let default_sst = shared_strings::Sst {
-                        xmlns: String::from("http://schemas.openxmlformats.org/spreadsheetml/2006/main"),
+                        xmlns: String::from(
+                            "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+                        ),
                         count: String::from("0"),
                         unique_count: String::from("0"),
                         si: vec![],
