@@ -55,9 +55,9 @@ pub mod schemas {
             #[serde(skip_serializing_if = "Option::is_none")]
             pub family: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            pub b: Option<Val>,
+            pub b: Option<BooleanProperty>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            pub i: Option<Val>,
+            pub i: Option<BooleanProperty>,
             #[serde(skip_serializing_if = "Option::is_none")]
             pub strike: Option<Val>,
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -78,6 +78,12 @@ pub mod schemas {
             pub vert_align: Option<Val>,
             #[serde(skip_serializing_if = "Option::is_none")]
             pub scheme: Option<Val>,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, Clone)]
+        pub struct BooleanProperty {
+            #[serde(rename = "@val", default, skip_serializing_if = "Option::is_none")]
+            pub val: Option<String>,
         }
 
         #[derive(Serialize, Deserialize, Debug, Clone)]
