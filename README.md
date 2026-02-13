@@ -9,9 +9,10 @@ CLI binary name:
 
 ## Core Commands
 
-- `check-in [-o <output>] <file>...`
+- `check-in [-o <container-dir>] <file>...`
   - Converts compiled OOXML bundles (for example `.xlsx`, `.docx`, `.pptx`) into normalized raw trees (`*_ooxml`).
-  - For `check-in`, `-o, --output` is the exact destination raw-tree directory path (the directory that will contain `[Content_Types].xml`, `xl/`, etc.), not a parent/container directory.
+  - For `check-in`, `-o, --output` is a container directory. The generated raw tree directory is created inside it.
+  - Raw tree directory naming is app-controlled (`<input-filename>_ooxml`), which `check-out` uses to derive the compiled output extension when `-o` is not provided.
 - `check-out [-o <output>] <dir_ooxml>...`
   - Converts raw OOXML trees (`*_ooxml`) back into compiled bundles (original extension preserved from the directory name).
   - For `check-out`, `-o, --output` is the exact destination compiled file path (for example `report.xlsx`).
@@ -55,7 +56,7 @@ ocv git-install --repo . --force
 Example explicit output paths:
 
 ```bash
-ocv check-in -o path/to/raw/my_bundle.xlsx_ooxml path/to/my_bundle.xlsx
+ocv check-in -o path/to/raw path/to/my_bundle.xlsx
 ocv check-out -o path/to/build/my_bundle.xlsx path/to/raw/my_bundle.xlsx_ooxml
 ```
 

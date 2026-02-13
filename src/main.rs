@@ -31,7 +31,7 @@ enum Commands {
         /// Input compiled OOXML bundle files
         #[arg(required = true)]
         paths: Vec<PathBuf>,
-        /// Explicit output raw-tree directory path (single input only)
+        /// Output container directory for generated raw OOXML trees
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
@@ -89,9 +89,10 @@ fn check_in_path(path: &PathBuf, output: Option<&PathBuf>) {
     let file_name = path.file_name().unwrap().to_str().unwrap();
     log::debug!("File name: {:?}", file_name);
 
+    let output_name = file_name.to_owned() + "_ooxml";
     let output_dir = output
-        .cloned()
-        .unwrap_or_else(|| path.with_file_name(file_name.to_owned() + "_ooxml"));
+        .map(|container| container.join(&output_name))
+        .unwrap_or_else(|| path.with_file_name(output_name));
     log::debug!("Output dir: {:?}", output_dir);
 
     let work_dir = tempdir().unwrap().path().to_path_buf();
@@ -657,9 +658,6 @@ fn main() {
 
     match &cli.command {
         Commands::CheckIn { paths, output } => {
-            if output.is_some() && paths.len() != 1 {
-                panic!("Error: --output/-o requires exactly one input path");
-            }
             for path in paths {
                 check_in_path(path, output.as_ref());
             }

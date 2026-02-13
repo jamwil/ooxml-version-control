@@ -157,24 +157,25 @@ fn test_check_out_with_invalid_file() {
 }
 
 #[test]
-fn test_check_in_with_explicit_output_path() {
+fn test_check_in_with_output_container_path() {
     let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
     let mut cmd = Command::cargo_bin("ocv").unwrap();
 
     let temp_dir = tempdir().unwrap();
     let test_file_path = temp_dir.path().join("book.xlsx");
-    let explicit_output = temp_dir.path().join("custom_output_dir");
+    let output_container = temp_dir.path().join("custom_output_container");
     fs::copy(&fixture, &test_file_path).unwrap();
 
     cmd.arg("check-in")
         .arg("-o")
-        .arg(&explicit_output)
+        .arg(&output_container)
         .arg(&test_file_path)
         .assert()
         .success();
 
-    assert!(explicit_output.is_dir());
-    assert!(explicit_output.join("xl/workbook.xml").is_file());
+    let expected_raw_dir = output_container.join("book.xlsx_ooxml");
+    assert!(expected_raw_dir.is_dir());
+    assert!(expected_raw_dir.join("xl/workbook.xml").is_file());
 }
 
 #[test]
@@ -198,26 +199,27 @@ fn test_check_out_with_explicit_output_path() {
 }
 
 #[test]
-fn test_check_in_with_output_and_multiple_inputs_fails() {
+fn test_check_in_with_output_container_and_multiple_inputs_succeeds() {
     let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
     let mut cmd = Command::cargo_bin("ocv").unwrap();
 
     let temp_dir = tempdir().unwrap();
     let file1 = temp_dir.path().join("book1.xlsx");
     let file2 = temp_dir.path().join("book2.xlsx");
+    let output_container = temp_dir.path().join("raw");
     fs::copy(&fixture, &file1).unwrap();
     fs::copy(&fixture, &file2).unwrap();
 
     cmd.arg("check-in")
         .arg("-o")
-        .arg(temp_dir.path().join("single-output"))
+        .arg(&output_container)
         .arg(&file1)
         .arg(&file2)
         .assert()
-        .failure()
-        .stderr(predicates::str::contains(
-            "Error: --output/-o requires exactly one input path",
-        ));
+        .success();
+
+    assert!(output_container.join("book1.xlsx_ooxml").is_dir());
+    assert!(output_container.join("book2.xlsx_ooxml").is_dir());
 }
 
 #[test]
