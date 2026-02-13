@@ -3,7 +3,6 @@ use ooxml_version_control::filesystem;
 use ooxml_version_control::ooxml::{read_xml_file, schemas::shared_strings};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command as ProcessCommand;
 use tempfile::tempdir;
 
 #[test]
@@ -253,37 +252,6 @@ fn test_read_xml_file_from_integration_target() {
     assert_eq!(sst.count, "2");
     assert_eq!(sst.unique_count, "2");
     assert_eq!(sst.si.len(), 2);
-}
-
-#[test]
-fn test_git_install_creates_hooks() {
-    let temp_dir = tempdir().unwrap();
-    let repo = temp_dir.path().to_path_buf();
-
-    let init_status = ProcessCommand::new("git")
-        .arg("init")
-        .arg(&repo)
-        .status()
-        .unwrap();
-    assert!(init_status.success());
-
-    let mut cmd = Command::cargo_bin("ocv").unwrap();
-    cmd.arg("git-install")
-        .arg("--repo")
-        .arg(&repo)
-        .assert()
-        .success();
-
-    assert!(repo.join(".git/hooks/pre-commit").is_file());
-    assert!(repo.join(".git/hooks/post-checkout").is_file());
-    assert!(repo.join(".git/hooks/post-merge").is_file());
-
-    let pre_commit = fs::read_to_string(repo.join(".git/hooks/pre-commit")).unwrap();
-    let post_checkout = fs::read_to_string(repo.join(".git/hooks/post-checkout")).unwrap();
-    let post_merge = fs::read_to_string(repo.join(".git/hooks/post-merge")).unwrap();
-    assert!(pre_commit.contains("run check-in with explicit OOXML bundle paths"));
-    assert!(post_checkout.contains("run check-out with explicit *_ooxml paths"));
-    assert!(post_merge.contains("run check-out with explicit *_ooxml paths"));
 }
 
 #[test]

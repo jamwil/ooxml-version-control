@@ -11,7 +11,6 @@ use std::fs;
 use std::fs::remove_file;
 use std::io::{self, Cursor, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tempfile::tempdir;
 
 #[derive(Parser)]
@@ -43,15 +42,6 @@ enum Commands {
         /// Explicit output compiled bundle file path (single input only)
         #[arg(short, long)]
         output: Option<PathBuf>,
-    },
-    /// Install reminder-only git hooks that print guidance (no automatic check-in/check-out)
-    GitInstall {
-        /// Repository path where hooks should be installed
-        #[arg(long, default_value = ".")]
-        repo: PathBuf,
-        /// Overwrite existing hooks
-        #[arg(long)]
-        force: bool,
     },
     /// Validate XML syntax for OOXML raw trees (.xml/.rels)
     Validate {
@@ -188,62 +178,6 @@ fn check_out_path(path: &PathBuf, output: Option<&PathBuf>) {
     filesystem::zip(&path, &output_file);
 
     log::info!("Checked out: {:?}", output_file);
-}
-
-fn git_output(args: &[&str], cwd: &PathBuf) -> Option<String> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8(output.stdout).ok()
-}
-
-fn find_repo_root(path: &PathBuf) -> Option<PathBuf> {
-    let output = git_output(&["rev-parse", "--show-toplevel"], path)?;
-    Some(PathBuf::from(output.trim()))
-}
-
-fn install_hook(path: &PathBuf, content: &str, force: bool) {
-    if path.exists() && !force {
-        log::warn!("Skipping existing hook (use --force): {:?}", path);
-        return;
-    }
-    let mut file = fs::File::create(path).unwrap();
-    file.write_all(content.as_bytes()).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(path, perms).unwrap();
-    }
-    log::info!("Installed hook: {:?}", path);
-}
-
-fn git_install(repo: &PathBuf, force: bool) {
-    let repo_root =
-        find_repo_root(repo).unwrap_or_else(|| panic!("Error: {:?} is not a git repository", repo));
-    let hooks_dir = repo_root.join(".git/hooks");
-    fs::create_dir_all(&hooks_dir).unwrap();
-
-    let pre_commit = format!(
-        "#!/bin/sh\nset -e\n\necho \"ocv: run check-in with explicit OOXML bundle paths (for example .xlsx/.docx/.pptx) before committing.\" >&2\n"
-    );
-    install_hook(&hooks_dir.join("pre-commit"), &pre_commit, force);
-
-    let post_checkout = format!(
-        "#!/bin/sh\nset -e\n\necho \"ocv: run check-out with explicit *_ooxml paths after checkout if needed.\" >&2\n"
-    );
-    install_hook(&hooks_dir.join("post-checkout"), &post_checkout, force);
-
-    let post_merge = format!(
-        "#!/bin/sh\nset -e\n\necho \"ocv: run check-out with explicit *_ooxml paths after merge if needed.\" >&2\n"
-    );
-    install_hook(&hooks_dir.join("post-merge"), &post_merge, force);
 }
 
 fn validation_targets_for_path(path: &PathBuf) -> Vec<PathBuf> {
@@ -670,7 +604,6 @@ fn main() {
                 check_out_path(path, output.as_ref());
             }
         }
-        Commands::GitInstall { repo, force } => git_install(repo, *force),
         Commands::Validate {
             paths,
             mode,
@@ -683,62 +616,7 @@ fn main() {
 mod tests {
     use super::*;
     use std::panic;
-    use std::sync::{Mutex, OnceLock};
     use tempfile::tempdir;
-
-    fn cwd_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    fn lock_cwd() -> std::sync::MutexGuard<'static, ()> {
-        cwd_lock().lock().unwrap_or_else(|e| e.into_inner())
-    }
-
-    struct CwdGuard {
-        original: PathBuf,
-    }
-
-    impl CwdGuard {
-        fn to(path: &PathBuf) -> Self {
-            let original = std::env::current_dir().unwrap();
-            std::env::set_current_dir(path).unwrap();
-            Self { original }
-        }
-    }
-
-    impl Drop for CwdGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original);
-        }
-    }
-
-    #[test]
-    fn test_git_output_and_find_repo_root_fail_outside_repo() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        let _guard = CwdGuard::to(&root);
-
-        assert!(git_output(&["rev-parse", "--show-toplevel"], &root).is_none());
-        assert!(find_repo_root(&root).is_none());
-    }
-
-    #[test]
-    fn test_install_hook_skip_and_force() {
-        let temp = tempdir().unwrap();
-        let hook_path = temp.path().join("hook.sh");
-
-        install_hook(&hook_path, "first\n", false);
-        let result = panic::catch_unwind(|| install_hook(&hook_path, "second\n", false));
-        assert!(result.is_ok());
-        let content = fs::read_to_string(&hook_path).unwrap();
-        assert_eq!(content, "first\n");
-
-        install_hook(&hook_path, "second\n", true);
-        let content = fs::read_to_string(&hook_path).unwrap();
-        assert_eq!(content, "second\n");
-    }
 
     #[test]
     fn test_validation_targets_for_xml_file() {
@@ -787,11 +665,6 @@ mod tests {
 
     #[test]
     fn test_validate_paths_no_args_panics_when_no_targets() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        let _guard = CwdGuard::to(&root);
-
         let result = panic::catch_unwind(|| {
             validate_paths(&[], ValidationMode::Basic, SchemaProfile::Transitional)
         });
