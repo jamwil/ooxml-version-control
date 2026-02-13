@@ -247,6 +247,46 @@ fn test_check_out_with_output_container_and_multiple_inputs_succeeds() {
 }
 
 #[test]
+fn test_xlsx_roundtrip_and_validate_xml() {
+    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
+    let temp_dir = tempdir().unwrap();
+    let input_xlsx = temp_dir.path().join("roundtrip.xlsx");
+    fs::copy(&fixture, &input_xlsx).unwrap();
+
+    let mut check_in_cmd = Command::cargo_bin("ocv").unwrap();
+    check_in_cmd
+        .arg("check-in")
+        .arg(&input_xlsx)
+        .assert()
+        .success();
+
+    let normalized_dir = temp_dir.path().join("roundtrip.xlsx_ooxml");
+    assert!(normalized_dir.is_dir());
+
+    let mut check_out_cmd = Command::cargo_bin("ocv").unwrap();
+    check_out_cmd
+        .arg("check-out")
+        .arg(&normalized_dir)
+        .assert()
+        .success();
+
+    let rebuilt_xlsx = temp_dir.path().join("roundtrip.xlsx");
+    assert!(rebuilt_xlsx.is_file());
+
+    let rebuilt_raw_dir = temp_dir.path().join("rebuilt_roundtrip.xlsx_ooxml");
+    filesystem::unzip(&rebuilt_xlsx, &rebuilt_raw_dir);
+    assert!(rebuilt_raw_dir.join("xl/workbook.xml").is_file());
+
+    let mut validate_cmd = Command::cargo_bin("ocv").unwrap();
+    validate_cmd
+        .arg("validate")
+        .arg(&rebuilt_raw_dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("XML validation passed"));
+}
+
+#[test]
 fn test_read_xml_file_from_integration_target() {
     let sst: shared_strings::Sst =
         read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();
