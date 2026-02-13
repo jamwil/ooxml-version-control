@@ -58,6 +58,32 @@ fn test_check_in_with_valid_file() {
             !calc_chain_path_2.exists(),
             "calcChain.xml should not exist in output 2"
         );
+
+        let workbook_rels_1 = fs::read_to_string(output_dir_1.join("xl/_rels/workbook.xml.rels"))
+            .expect("workbook rels should be readable");
+        let workbook_rels_2 = fs::read_to_string(output_dir_2.join("xl/_rels/workbook.xml.rels"))
+            .expect("workbook rels should be readable");
+        assert!(
+            !workbook_rels_1.contains("calcChain"),
+            "workbook.xml.rels should not reference calcChain in output 1"
+        );
+        assert!(
+            !workbook_rels_2.contains("calcChain"),
+            "workbook.xml.rels should not reference calcChain in output 2"
+        );
+
+        let content_types_1 = fs::read_to_string(output_dir_1.join("[Content_Types].xml"))
+            .expect("content types should be readable");
+        let content_types_2 = fs::read_to_string(output_dir_2.join("[Content_Types].xml"))
+            .expect("content types should be readable");
+        assert!(
+            !content_types_1.contains("/xl/calcChain.xml"),
+            "[Content_Types].xml should not include calcChain override in output 1"
+        );
+        assert!(
+            !content_types_2.contains("/xl/calcChain.xml"),
+            "[Content_Types].xml should not include calcChain override in output 2"
+        );
     }
 
     assert_ne!(output_dir_1.is_dir(), true);

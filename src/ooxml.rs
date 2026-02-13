@@ -182,7 +182,8 @@ impl OoxmlBuffer {
         let mut in_target_cell = false; // set to true when cell type is 's', i.e., shared string
         let mut in_target_cell_value = false;
         let mut cell_attrs: Option<Vec<(Vec<u8>, String)>> = None; // stores original attributes as owned key/value pairs
-        let mut ss_index = None; // stores the value of the current shared string index
+        let mut ss_index = None; // stores the parsed value of the current shared string index
+        let mut ss_index_raw: Option<String> = None; // stores the raw value for lossless fallback
 
         loop {
             // Begin looping through xml events and intercepting shared string cells
@@ -212,6 +213,8 @@ impl OoxmlBuffer {
 
                                 // Preserve attributes for later reuse
                                 cell_attrs = Some(attrs_pairs);
+                                ss_index = None;
+                                ss_index_raw = None;
                             } else {
                                 // Non shared-string cell – write unchanged
                                 writer.write_event(Event::Start(e.to_owned())).unwrap();
@@ -232,16 +235,25 @@ impl OoxmlBuffer {
                             writer.write_event(Event::Start(e.to_owned())).unwrap();
                         }
                     }
-                    _ => writer.write_event(Event::Start(e.to_owned())).unwrap(),
+                    _ => {
+                        if !in_target_cell {
+                            writer.write_event(Event::Start(e.to_owned())).unwrap();
+                        }
+                    }
                 },
                 // Match the text value within a target cell value block
                 Event::Text(e) if in_target_cell_value => {
                     // Set the shared string index that we want to grab
-                    let cell_value = e.decode().unwrap();
-                    ss_index = Some(cell_value.parse::<usize>().unwrap());
+                    let cell_value = e.decode().unwrap().into_owned();
+                    ss_index_raw = Some(cell_value.clone());
+                    ss_index = cell_value.trim().parse::<usize>().ok();
                 }
                 // Match some other text value and simply write it back
-                Event::Text(e) => writer.write_event(Event::Text(e.to_owned())).unwrap(),
+                Event::Text(e) => {
+                    if !in_target_cell {
+                        writer.write_event(Event::Text(e.to_owned())).unwrap();
+                    }
+                }
                 // Match the end of a block and rewrite the block if we're in a target cell
                 Event::End(e) => match e.name().as_ref() {
                     // We're at a closing value tag
@@ -260,16 +272,11 @@ impl OoxmlBuffer {
                         // Are we in a target cell or is this some other cell that we don't
                         // want to modify?
                         if in_target_cell {
-                            // We're in a target cell -- let's inline the string
-                            let index = ss_index.expect("Missing shared string index");
-
-                            // We'll construct a new 'c' element that takes the form:
-                            // <c> <is> <t> raw string value </t> </is> </c>
-
                             // Construct and write a new 'c' (cell) element
                             let mut c_element = BytesStart::new("c");
 
-                            // Copy all original attributes back except the "t" attribute
+                            // Copy all original attributes back except the "t" attribute.
+                            // We'll set it explicitly below based on whether we can inline.
                             if let Some(attrs) = cell_attrs.as_ref() {
                                 for (k, v) in attrs {
                                     if k.as_slice() == b"t" {
@@ -281,38 +288,57 @@ impl OoxmlBuffer {
                                 }
                             }
 
-                            // Replace the type with inlineStr
-                            c_element.push_attribute(("t", "inlineStr"));
-                            writer.write_event(Event::Start(c_element)).unwrap();
+                            if let Some(si) = ss_index.and_then(|idx| sst.si.get(idx)) {
+                                // Replace the type with inlineStr
+                                c_element.push_attribute(("t", "inlineStr"));
+                                writer.write_event(Event::Start(c_element)).unwrap();
 
-                            // Add the inner 'is' element (inline string)
-                            writer
-                                .write_event(Event::Start(BytesStart::new("is")))
-                                .unwrap();
+                                // Add the inner 'is' element (inline string)
+                                writer
+                                    .write_event(Event::Start(BytesStart::new("is")))
+                                    .unwrap();
 
-                            // Get the shared string value and write it in
-                            let si = &sst.si[index];
-                            if let Some(t) = &si.t {
-                                // The shared string is a simple text value
-                                writer
-                                    .write_event(Event::Start(BytesStart::new("t")))
-                                    .unwrap();
-                                writer
-                                    .write_event(Event::Text(BytesText::new(&t.text)))
-                                    .unwrap();
-                                writer.write_event(Event::End(BytesEnd::new("t"))).unwrap();
-                            } else if let Some(r) = &si.r {
-                                // The shared string has inline formatting
-                                for item in r {
-                                    to_utf8_io_writer(&mut writer.get_mut(), &item).unwrap();
+                                // Get the shared string value and write it in
+                                if let Some(t) = &si.t {
+                                    // Preserve xml:space where needed to keep lexical content compliant.
+                                    let mut t_element = BytesStart::new("t");
+                                    if let Some(xml_space) = &t.xml_space {
+                                        t_element.push_attribute(("xml:space", xml_space.as_str()));
+                                    }
+                                    writer.write_event(Event::Start(t_element)).unwrap();
+                                    writer
+                                        .write_event(Event::Text(BytesText::new(&t.text)))
+                                        .unwrap();
+                                    writer.write_event(Event::End(BytesEnd::new("t"))).unwrap();
+                                } else if let Some(r) = &si.r {
+                                    // The shared string has inline formatting
+                                    for item in r {
+                                        to_utf8_io_writer(&mut writer.get_mut(), &item).unwrap();
+                                    }
                                 }
-                            }
 
-                            writer.write_event(Event::End(BytesEnd::new("is"))).unwrap();
-                            writer.write_event(Event::End(BytesEnd::new("c"))).unwrap();
+                                writer.write_event(Event::End(BytesEnd::new("is"))).unwrap();
+                                writer.write_event(Event::End(BytesEnd::new("c"))).unwrap();
+                            } else {
+                                // Fallback to the original shared-string representation when index
+                                // parsing or lookup fails so we don't emit a corrupt worksheet.
+                                c_element.push_attribute(("t", "s"));
+                                writer.write_event(Event::Start(c_element)).unwrap();
+                                if let Some(raw) = ss_index_raw.as_ref() {
+                                    writer
+                                        .write_event(Event::Start(BytesStart::new("v")))
+                                        .unwrap();
+                                    writer
+                                        .write_event(Event::Text(BytesText::new(raw)))
+                                        .unwrap();
+                                    writer.write_event(Event::End(BytesEnd::new("v"))).unwrap();
+                                }
+                                writer.write_event(Event::End(BytesEnd::new("c"))).unwrap();
+                            }
 
                             // Reset the state
                             ss_index = None;
+                            ss_index_raw = None;
                             cell_attrs = None;
                             in_target_cell = false;
                         } else {
@@ -320,10 +346,95 @@ impl OoxmlBuffer {
                             writer.write_event(Event::End(e.to_owned())).unwrap();
                         }
                     }
-                    _ => writer.write_event(Event::End(e.to_owned())).unwrap(),
+                    _ => {
+                        if !in_target_cell {
+                            writer.write_event(Event::End(e.to_owned())).unwrap();
+                        }
+                    }
                 },
-                Event::Empty(e) => writer.write_event(Event::Empty(e.to_owned())).unwrap(),
+                Event::Empty(e) => {
+                    if !in_target_cell {
+                        writer.write_event(Event::Empty(e.to_owned())).unwrap();
+                    }
+                }
                 Event::Eof => break,
+                event => {
+                    if !in_target_cell {
+                        writer.write_event(event).unwrap();
+                    }
+                }
+            }
+        }
+
+        self.buffer = output;
+        self
+    }
+
+    pub fn remove_calc_chain_relationship_entries(mut self) -> Self {
+        let mut reader = Reader::from_reader(&self.buffer[..]);
+        let mut output = Vec::new();
+        let mut writer = Writer::new(Cursor::new(&mut output));
+
+        loop {
+            match reader.read_event().unwrap() {
+                Event::Eof => break,
+                Event::Empty(e) if e.name().as_ref() == b"Relationship" => {
+                    let mut relationship_type: Option<String> = None;
+                    let mut target: Option<String> = None;
+                    for attr in e.attributes().with_checks(false).flatten() {
+                        if attr.key.as_ref() == b"Type" {
+                            relationship_type = Some(attr.unescape_value().unwrap().into_owned());
+                        } else if attr.key.as_ref() == b"Target" {
+                            target = Some(attr.unescape_value().unwrap().into_owned());
+                        }
+                    }
+
+                    let is_calc_chain_type = relationship_type
+                        .as_deref()
+                        .map(|t| t.ends_with("/calcChain"))
+                        .unwrap_or(false);
+                    let is_calc_chain_target = target
+                        .as_deref()
+                        .map(|t| t.trim_start_matches('/').ends_with("calcChain.xml"))
+                        .unwrap_or(false);
+
+                    if !(is_calc_chain_type || is_calc_chain_target) {
+                        writer.write_event(Event::Empty(e.to_owned())).unwrap();
+                    }
+                }
+                event => writer.write_event(event).unwrap(),
+            }
+        }
+
+        self.buffer = output;
+        self
+    }
+
+    pub fn remove_calc_chain_content_type_override(mut self) -> Self {
+        let mut reader = Reader::from_reader(&self.buffer[..]);
+        let mut output = Vec::new();
+        let mut writer = Writer::new(Cursor::new(&mut output));
+
+        loop {
+            match reader.read_event().unwrap() {
+                Event::Eof => break,
+                Event::Empty(e) if e.name().as_ref() == b"Override" => {
+                    let mut part_name: Option<String> = None;
+                    for attr in e.attributes().with_checks(false).flatten() {
+                        if attr.key.as_ref() == b"PartName" {
+                            part_name = Some(attr.unescape_value().unwrap().into_owned());
+                        }
+                    }
+
+                    let is_calc_chain_override = part_name
+                        .as_deref()
+                        .map(|p| p.eq_ignore_ascii_case("/xl/calcChain.xml"))
+                        .unwrap_or(false);
+
+                    if !is_calc_chain_override {
+                        writer.write_event(Event::Empty(e.to_owned())).unwrap();
+                    }
+                }
                 event => writer.write_event(event).unwrap(),
             }
         }
@@ -623,5 +734,51 @@ mod tests {
                 .text,
             " "
         );
+
+        assert_eq!(
+            new_worksheet.sheet_data.row[1].c[3]
+                .is
+                .as_ref()
+                .unwrap()
+                .r
+                .as_ref()
+                .unwrap()[0]
+                .t
+                .xml_space
+                .as_deref(),
+            Some("preserve")
+        );
+    }
+
+    #[test]
+    fn test_remove_calc_chain_relationship_entries() {
+        let fixture =
+            PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml/xl/_rels/workbook.xml.rels");
+        let temp_dir = tempdir().unwrap();
+        let output_file_path = temp_dir.path().join("workbook.xml.rels");
+        fs::copy(&fixture, &output_file_path).unwrap();
+
+        OoxmlBuffer::new(output_file_path.to_str().unwrap())
+            .remove_calc_chain_relationship_entries()
+            .save();
+
+        let rels = fs::read_to_string(output_file_path).unwrap();
+        assert!(!rels.contains("relationships/calcChain"));
+        assert!(!rels.contains("Target=\"calcChain.xml\""));
+    }
+
+    #[test]
+    fn test_remove_calc_chain_content_type_override() {
+        let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml/[Content_Types].xml");
+        let temp_dir = tempdir().unwrap();
+        let output_file_path = temp_dir.path().join("[Content_Types].xml");
+        fs::copy(&fixture, &output_file_path).unwrap();
+
+        OoxmlBuffer::new(output_file_path.to_str().unwrap())
+            .remove_calc_chain_content_type_override()
+            .save();
+
+        let content_types = fs::read_to_string(output_file_path).unwrap();
+        assert!(!content_types.contains("/xl/calcChain.xml"));
     }
 }

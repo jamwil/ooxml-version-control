@@ -65,6 +65,20 @@ fn main() {
                         }
                     }
 
+                    // Keep package metadata consistent when calcChain is removed.
+                    let workbook_rels = work_dir.join("xl/_rels/workbook.xml.rels");
+                    if workbook_rels.exists() {
+                        OoxmlBuffer::new(workbook_rels.to_str().unwrap())
+                            .remove_calc_chain_relationship_entries()
+                            .save();
+                    }
+                    let content_types = work_dir.join("[Content_Types].xml");
+                    if content_types.exists() {
+                        OoxmlBuffer::new(content_types.to_str().unwrap())
+                            .remove_calc_chain_content_type_override()
+                            .save();
+                    }
+
                     // Get the shared strings
                     let ss_file = work_dir.join("xl/sharedStrings.xml");
                     let default_sst = shared_strings::Sst {
@@ -78,12 +92,12 @@ fn main() {
                     let sst: shared_strings::Sst =
                         read_xml_file(ss_file.to_str().unwrap()).unwrap_or(default_sst);
 
-                    // Process all XML files in work directory
-                    let xml_files = filesystem::collect_files(&work_dir, "**/*.xml");
-                    for xml_file in xml_files {
-                        log::debug!("Tidying XML file: {:?}", xml_file);
+                    // Only rewrite worksheet XML files; keep other OOXML parts byte-faithful.
+                    let worksheet_xml_files =
+                        filesystem::collect_files(&work_dir, "xl/worksheets/*.xml");
+                    for xml_file in worksheet_xml_files {
+                        log::debug!("Inlining shared strings in worksheet: {:?}", xml_file);
                         OoxmlBuffer::new(xml_file.to_str().unwrap())
-                            .tidy()
                             .inline_shared_strings(&sst)
                             .save();
                     }
