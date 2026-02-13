@@ -157,6 +157,93 @@ fn test_check_out_with_invalid_file() {
 }
 
 #[test]
+fn test_check_in_with_explicit_output_path() {
+    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
+
+    let temp_dir = tempdir().unwrap();
+    let test_file_path = temp_dir.path().join("book.xlsx");
+    let explicit_output = temp_dir.path().join("custom_output_dir");
+    fs::copy(&fixture, &test_file_path).unwrap();
+
+    cmd.arg("check-in")
+        .arg("-o")
+        .arg(&explicit_output)
+        .arg(&test_file_path)
+        .assert()
+        .success();
+
+    assert!(explicit_output.is_dir());
+    assert!(explicit_output.join("xl/workbook.xml").is_file());
+}
+
+#[test]
+fn test_check_out_with_explicit_output_path() {
+    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
+
+    let temp_dir = tempdir().unwrap();
+    let test_folder_path = temp_dir.path().join("simple_book.xlsx_ooxml");
+    filesystem::copy_dir(&fixture, &test_folder_path);
+    let explicit_output = temp_dir.path().join("custom_name.xlsx");
+
+    cmd.arg("check-out")
+        .arg("-o")
+        .arg(&explicit_output)
+        .arg(&test_folder_path)
+        .assert()
+        .success();
+
+    assert!(explicit_output.is_file());
+}
+
+#[test]
+fn test_check_in_with_output_and_multiple_inputs_fails() {
+    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
+
+    let temp_dir = tempdir().unwrap();
+    let file1 = temp_dir.path().join("book1.xlsx");
+    let file2 = temp_dir.path().join("book2.xlsx");
+    fs::copy(&fixture, &file1).unwrap();
+    fs::copy(&fixture, &file2).unwrap();
+
+    cmd.arg("check-in")
+        .arg("-o")
+        .arg(temp_dir.path().join("single-output"))
+        .arg(&file1)
+        .arg(&file2)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Error: --output/-o requires exactly one input path",
+        ));
+}
+
+#[test]
+fn test_check_out_with_output_and_multiple_inputs_fails() {
+    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
+
+    let temp_dir = tempdir().unwrap();
+    let dir1 = temp_dir.path().join("book1.xlsx_ooxml");
+    let dir2 = temp_dir.path().join("book2.xlsx_ooxml");
+    filesystem::copy_dir(&fixture, &dir1);
+    filesystem::copy_dir(&fixture, &dir2);
+
+    cmd.arg("check-out")
+        .arg("-o")
+        .arg(temp_dir.path().join("single-output.xlsx"))
+        .arg(&dir1)
+        .arg(&dir2)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Error: --output/-o requires exactly one input path",
+        ));
+}
+
+#[test]
 fn test_read_xml_file_from_integration_target() {
     let sst: shared_strings::Sst =
         read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();

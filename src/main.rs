@@ -31,12 +31,18 @@ enum Commands {
         /// Files or directories to check in
         #[arg(required = true)]
         paths: Vec<PathBuf>,
+        /// Explicit output raw-tree directory path (single input only)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
     /// Check out files or directories
     CheckOut {
         /// Files or directories to check out
         #[arg(required = true)]
         paths: Vec<PathBuf>,
+        /// Explicit output compiled bundle file path (single input only)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
     /// Install git hooks for a raw-commit / compiled-worktree workflow
     GitInstall {
@@ -73,7 +79,7 @@ enum SchemaProfile {
     Strict,
 }
 
-fn check_in_path(path: &PathBuf) {
+fn check_in_path(path: &PathBuf, output: Option<&PathBuf>) {
     if !path.is_file() {
         panic!("Error: Path is not a valid file: {:?}", path);
     }
@@ -83,7 +89,9 @@ fn check_in_path(path: &PathBuf) {
     let file_name = path.file_name().unwrap().to_str().unwrap();
     log::debug!("File name: {:?}", file_name);
 
-    let output_dir = path.with_file_name(file_name.to_owned() + "_ooxml");
+    let output_dir = output
+        .cloned()
+        .unwrap_or_else(|| path.with_file_name(file_name.to_owned() + "_ooxml"));
     log::debug!("Output dir: {:?}", output_dir);
 
     let work_dir = tempdir().unwrap().path().to_path_buf();
@@ -161,7 +169,7 @@ fn check_in_path(path: &PathBuf) {
     log::info!("Checked in: {:?}", output_dir);
 }
 
-fn check_out_path(path: &PathBuf) {
+fn check_out_path(path: &PathBuf, output: Option<&PathBuf>) {
     if !path.is_dir() {
         panic!("Error: Path is not a valid directory: {:?}", path);
     }
@@ -171,7 +179,9 @@ fn check_out_path(path: &PathBuf) {
     let input_dir = path.file_name().unwrap().to_str().unwrap();
     log::debug!("Input dir: {:?}", input_dir);
 
-    let output_file = path.with_file_name(input_dir.to_string().replace("_ooxml", ""));
+    let output_file = output
+        .cloned()
+        .unwrap_or_else(|| path.with_file_name(input_dir.to_string().replace("_ooxml", "")));
     log::debug!("File name: {:?}", output_file);
 
     filesystem::zip(&path, &output_file);
@@ -646,14 +656,20 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::CheckIn { paths } => {
+        Commands::CheckIn { paths, output } => {
+            if output.is_some() && paths.len() != 1 {
+                panic!("Error: --output/-o requires exactly one input path");
+            }
             for path in paths {
-                check_in_path(path);
+                check_in_path(path, output.as_ref());
             }
         }
-        Commands::CheckOut { paths } => {
+        Commands::CheckOut { paths, output } => {
+            if output.is_some() && paths.len() != 1 {
+                panic!("Error: --output/-o requires exactly one input path");
+            }
             for path in paths {
-                check_out_path(path);
+                check_out_path(path, output.as_ref());
             }
         }
         Commands::GitInstall { repo, force } => git_install(repo, *force),

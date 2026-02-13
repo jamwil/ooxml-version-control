@@ -7,10 +7,13 @@ CLI binary name:
 
 ## Core Commands
 
-- `check-in <file>...`
+- `check-in [-o <output>] <file>...`
   - Converts compiled OOXML bundles (for example `.xlsx`, `.docx`, `.pptx`) into normalized raw trees (`*_ooxml`).
-- `check-out <dir_ooxml>...`
+  - For `check-in`, `-o, --output` is the exact destination raw-tree directory path (the directory that will contain `[Content_Types].xml`, `xl/`, etc.), not a parent/container directory.
+- `check-out [-o <output>] <dir_ooxml>...`
   - Converts raw OOXML trees (`*_ooxml`) back into compiled bundles (original extension preserved from the directory name).
+  - For `check-out`, `-o, --output` is the exact destination compiled file path (for example `report.xlsx`).
+  - `-o, --output` requires exactly one input path.
 - `validate [--mode <basic|spec>] [--profile <transitional|strict>] [paths...]`
   - `--mode basic` (default): strict XML syntax validation for OOXML parts (`.xml` and `.rels`).
   - `--mode spec`: validates XML syntax and then validates supported OOXML parts against bundled ECMA-376 XSDs in `schemas/ooxml-xsd/`.
@@ -44,6 +47,13 @@ ocv git-install --repo . --force
 2. Run `check-in path/to/file.ext` for each bundle you want to convert.
 3. Commit your desired files.
 4. Run `check-out path/to/file.ext_ooxml` when you need a compiled bundle from raw OOXML.
+
+Example explicit output paths:
+
+```bash
+ocv check-in -o path/to/raw/my_bundle.xlsx_ooxml path/to/my_bundle.xlsx
+ocv check-out -o path/to/build/my_bundle.xlsx path/to/raw/my_bundle.xlsx_ooxml
+```
 
 ## Notes
 
