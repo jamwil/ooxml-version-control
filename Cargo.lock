@@ -713,6 +713,7 @@ dependencies = [
 [[package]]
 name = "quick-xml"
 version = "0.38.3"
+source = "git+https://github.com/jamwil/quick-xml.git?rev=399d550536f6c74ec5e824b85cb44706a4fa0837#399d550536f6c74ec5e824b85cb44706a4fa0837"
 dependencies = [
  "memchr",
  "serde",
