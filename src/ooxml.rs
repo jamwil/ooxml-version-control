@@ -112,12 +112,10 @@ pub mod schemas {
     }
 }
 
+#[inline(never)]
 pub fn read_xml_file<T: DeserializeOwned>(file_path: &str) -> Result<T, io::Error> {
     let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let result: T = from_reader(reader).unwrap();
-
-    Ok(result)
+    from_reader(BufReader::new(file)).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
 pub struct OoxmlBuffer {
@@ -780,5 +778,87 @@ mod tests {
 
         let content_types = fs::read_to_string(output_file_path).unwrap();
         assert!(!content_types.contains("/xl/calcChain.xml"));
+    }
+
+    #[test]
+    fn test_read_xml_file_success_path() {
+        #[derive(serde::Deserialize)]
+        struct Root {
+            value: String,
+        }
+
+        let temp_dir = tempdir().unwrap();
+        let xml_path = temp_dir.path().join("root.xml");
+        fs::write(&xml_path, "<root><value>ok</value></root>").unwrap();
+
+        let parsed: Root = read_xml_file(xml_path.to_str().unwrap()).unwrap();
+        assert_eq!(parsed.value, "ok");
+    }
+
+    #[test]
+    fn test_read_xml_file_returns_invalid_data_for_malformed_xml() {
+        #[derive(serde::Deserialize)]
+        struct Root {
+            #[serde(rename = "value")]
+            _value: String,
+        }
+
+        let temp_dir = tempdir().unwrap();
+        let xml_path = temp_dir.path().join("invalid.xml");
+        fs::write(&xml_path, "<root><value>missing end").unwrap();
+
+        let result: Result<Root, io::Error> = read_xml_file(xml_path.to_str().unwrap());
+        let err = result.err().expect("malformed xml should return an error");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_inline_shared_strings_preserves_non_shared_cells() {
+        let temp_dir = tempdir().unwrap();
+        let worksheet_path = temp_dir.path().join("sheet1.xml");
+        fs::write(
+            &worksheet_path,
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="str"><v>42</v></c></row></sheetData></worksheet>"#,
+        )
+        .unwrap();
+
+        let empty_sst = schemas::shared_strings::Sst {
+            xmlns: String::from("http://schemas.openxmlformats.org/spreadsheetml/2006/main"),
+            count: String::from("0"),
+            unique_count: String::from("0"),
+            si: vec![],
+        };
+
+        OoxmlBuffer::new(worksheet_path.to_str().unwrap())
+            .inline_shared_strings(&empty_sst)
+            .save();
+
+        let worksheet = fs::read_to_string(worksheet_path).unwrap();
+        assert!(worksheet.contains(r#"t="str""#));
+        assert!(worksheet.contains("<v>42</v>"));
+        assert!(!worksheet.contains(r#"t="inlineStr""#));
+    }
+
+    #[test]
+    fn test_inline_shared_strings_falls_back_on_invalid_index() {
+        let temp_dir = tempdir().unwrap();
+        let worksheet_path = temp_dir.path().join("sheet1.xml");
+        fs::write(
+            &worksheet_path,
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>not-a-number</v></c></row></sheetData></worksheet>"#,
+        )
+        .unwrap();
+
+        let sst: schemas::shared_strings::Sst =
+            read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();
+
+        OoxmlBuffer::new(worksheet_path.to_str().unwrap())
+            .inline_shared_strings(&sst)
+            .save();
+
+        let worksheet = fs::read_to_string(worksheet_path).unwrap();
+        assert!(worksheet.contains(r#"t="s""#));
+        assert!(worksheet.contains("<v>not-a-number</v>"));
+        assert!(!worksheet.contains(r#"t="inlineStr""#));
     }
 }

@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use ooxml_version_control::filesystem;
+use ooxml_version_control::ooxml::{read_xml_file, schemas::shared_strings};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
@@ -140,4 +141,14 @@ fn test_check_out_with_invalid_file() {
         .assert()
         .failure()
         .stderr(predicates::str::contains("Error: Path is not a valid file"));
+}
+
+#[test]
+fn test_read_xml_file_from_integration_target() {
+    let sst: shared_strings::Sst =
+        read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();
+
+    assert_eq!(sst.count, "2");
+    assert_eq!(sst.unique_count, "2");
+    assert_eq!(sst.si.len(), 2);
 }
