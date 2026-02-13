@@ -142,7 +142,9 @@ fn test_check_out_with_invalid_file() {
         .arg(invalid_folder)
         .assert()
         .failure()
-        .stderr(predicates::str::contains("Error: Path is not a valid file"));
+        .stderr(predicates::str::contains(
+            "Error: Path is not a valid directory",
+        ));
 }
 
 #[test]
@@ -181,9 +183,91 @@ fn test_git_install_creates_hooks() {
     let pre_commit = fs::read_to_string(repo.join(".git/hooks/pre-commit")).unwrap();
     let post_checkout = fs::read_to_string(repo.join(".git/hooks/post-checkout")).unwrap();
     let post_merge = fs::read_to_string(repo.join(".git/hooks/post-merge")).unwrap();
-    assert!(pre_commit.contains("run check-in with explicit .xlsx paths"));
+    assert!(pre_commit.contains("run check-in with explicit OOXML bundle paths"));
     assert!(post_checkout.contains("run check-out with explicit *_ooxml paths"));
     assert!(post_merge.contains("run check-out with explicit *_ooxml paths"));
+}
+
+#[test]
+fn test_check_in_out_and_validate_spec_with_docx_bundle() {
+    let temp_dir = tempdir().unwrap();
+    let raw_dir = temp_dir.path().join("sample.docx_ooxml");
+    fs::create_dir_all(raw_dir.join("_rels")).unwrap();
+    fs::create_dir_all(raw_dir.join("word")).unwrap();
+
+    fs::write(
+        raw_dir.join("[Content_Types].xml"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"#,
+    )
+    .unwrap();
+    fs::write(
+        raw_dir.join("_rels/.rels"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"#,
+    )
+    .unwrap();
+    fs::write(
+        raw_dir.join("word/document.xml"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Hello</w:t></w:r></w:p>
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>"#,
+    )
+    .unwrap();
+
+    let compiled_docx = temp_dir.path().join("sample.docx");
+    filesystem::zip(&raw_dir, &compiled_docx);
+
+    let mut check_in_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    check_in_cmd
+        .arg("check-in")
+        .arg(&compiled_docx)
+        .assert()
+        .success();
+
+    let checked_in_dir = temp_dir.path().join("sample.docx_ooxml");
+    assert!(checked_in_dir.is_dir());
+    assert!(checked_in_dir.join("word/document.xml").is_file());
+
+    let mut validate_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    validate_cmd
+        .arg("validate")
+        .arg("--mode")
+        .arg("spec")
+        .arg("--profile")
+        .arg("transitional")
+        .arg(&checked_in_dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("OOXML spec validation passed"));
+
+    let rebuilt_docx = temp_dir.path().join("sample.docx");
+    if rebuilt_docx.exists() {
+        fs::remove_file(&rebuilt_docx).unwrap();
+    }
+    let mut check_out_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    check_out_cmd
+        .arg("check-out")
+        .arg(&checked_in_dir)
+        .assert()
+        .success();
+
+    assert!(rebuilt_docx.is_file());
 }
 
 #[test]

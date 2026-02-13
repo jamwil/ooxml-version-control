@@ -163,7 +163,7 @@ fn check_in_path(path: &PathBuf) {
 
 fn check_out_path(path: &PathBuf) {
     if !path.is_dir() {
-        panic!("Error: Path is not a valid file: {:?}", path);
+        panic!("Error: Path is not a valid directory: {:?}", path);
     }
 
     log::info!("Checking out: {:?}", path);
@@ -220,7 +220,7 @@ fn git_install(repo: &PathBuf, force: bool) {
     fs::create_dir_all(&hooks_dir).unwrap();
 
     let pre_commit = format!(
-        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-in with explicit .xlsx paths before committing.\" >&2\n"
+        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-in with explicit OOXML bundle paths (for example .xlsx/.docx/.pptx) before committing.\" >&2\n"
     );
     install_hook(&hooks_dir.join("pre-commit"), &pre_commit, force);
 
@@ -259,7 +259,10 @@ fn validation_targets_for_path(path: &PathBuf) -> Vec<PathBuf> {
         return filesystem::collect_files_by_extension(path, &["xml", "rels"]);
     }
 
-    panic!("Error: Path does not exist or is not accessible: {:?}", path);
+    panic!(
+        "Error: Path does not exist or is not accessible: {:?}",
+        path
+    );
 }
 
 fn bundled_schema_root(profile: SchemaProfile) -> PathBuf {
@@ -344,14 +347,15 @@ fn root_default_namespace(file_path: &Path) -> Result<Option<String>, io::Error>
                         let Some(unescaped) = attr.unescape_value().ok() else {
                             continue;
                         };
-                        return Ok(Some(
-                            unescaped.into_owned(),
-                        ));
+                        return Ok(Some(unescaped.into_owned()));
                     }
                 }
                 return Ok(None);
             }
-            Ok(Event::Decl(_)) | Ok(Event::Comment(_)) | Ok(Event::PI(_)) | Ok(Event::DocType(_)) => {}
+            Ok(Event::Decl(_))
+            | Ok(Event::Comment(_))
+            | Ok(Event::PI(_))
+            | Ok(Event::DocType(_)) => {}
             Ok(Event::Eof) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -377,7 +381,11 @@ fn structured_errors_to_string(errors: &[libxml::error::StructuredError]) -> Str
                 (None, Some(line), None) => format!("line {line}"),
                 _ => "unknown location".to_string(),
             };
-            let msg = e.message.as_deref().unwrap_or("schema validation error").trim();
+            let msg = e
+                .message
+                .as_deref()
+                .unwrap_or("schema validation error")
+                .trim();
             format!("{loc}: {msg}")
         })
         .collect::<Vec<_>>()
@@ -513,12 +521,18 @@ fn sanitize_xml_for_schema_validation(file_path: &Path) -> Result<tempfile::Name
 }
 
 fn validate_file_against_schema(xml_path: &Path, schema_path: &Path) -> Result<(), String> {
-    let schema_str = schema_path.to_str().ok_or("non-utf8 schema path".to_string())?;
+    let schema_str = schema_path
+        .to_str()
+        .ok_or("non-utf8 schema path".to_string())?;
     let xml_str = xml_path.to_str().ok_or("non-utf8 xml path".to_string())?;
 
     let mut parser = SchemaParserContext::from_file(schema_str);
-    let mut validator = SchemaValidationContext::from_parser(&mut parser)
-        .map_err(|errs| format!("schema parse failed: {}", structured_errors_to_string(&errs)))?;
+    let mut validator = SchemaValidationContext::from_parser(&mut parser).map_err(|errs| {
+        format!(
+            "schema parse failed: {}",
+            structured_errors_to_string(&errs)
+        )
+    })?;
 
     validator
         .validate_file(xml_str)
@@ -527,21 +541,19 @@ fn validate_file_against_schema(xml_path: &Path, schema_path: &Path) -> Result<(
 
 fn uses_markup_compatibility_features(file_path: &Path) -> Result<bool, String> {
     let content = fs::read_to_string(file_path).map_err(|err| err.to_string())?;
-    Ok(content.contains("http://schemas.openxmlformats.org/markup-compatibility/2006")
-        || content.contains("http://purl.oclc.org/ooxml/markup-compatibility/main")
-        || content.contains("mc:AlternateContent")
-        || content.contains("mc:Choice")
-        || content.contains("mc:Fallback")
-        || content.contains("mc:Ignorable"))
+    Ok(
+        content.contains("http://schemas.openxmlformats.org/markup-compatibility/2006")
+            || content.contains("http://purl.oclc.org/ooxml/markup-compatibility/main")
+            || content.contains("mc:AlternateContent")
+            || content.contains("mc:Choice")
+            || content.contains("mc:Fallback")
+            || content.contains("mc:Ignorable"),
+    )
 }
 
 fn validate_path_spec(file_path: &Path, profile: SchemaProfile) -> Result<bool, String> {
-    validate_xml_file(
-        file_path
-            .to_str()
-            .ok_or("non-utf8 xml path".to_string())?,
-    )
-    .map_err(|err| err.to_string())?;
+    validate_xml_file(file_path.to_str().ok_or("non-utf8 xml path".to_string())?)
+        .map_err(|err| err.to_string())?;
 
     let namespace = root_default_namespace(file_path).map_err(|err| err.to_string())?;
     let Some(namespace) = namespace else {
@@ -595,7 +607,10 @@ fn validate_paths(paths: &[PathBuf], mode: ValidationMode, profile: SchemaProfil
                         log::debug!("Validated XML against schema: {:?}", target);
                     } else {
                         schema_skipped += 1;
-                        log::debug!("Skipped schema validation (no bundled schema): {:?}", target);
+                        log::debug!(
+                            "Skipped schema validation (no bundled schema): {:?}",
+                            target
+                        );
                     }
                 } else {
                     log::debug!("Validated XML: {:?}", target);
@@ -796,7 +811,8 @@ mod tests {
 
     #[test]
     fn test_bundled_schema_root_profiles() {
-        assert!(bundled_schema_root(SchemaProfile::Transitional).ends_with("schemas/ooxml-xsd/transitional"));
+        assert!(bundled_schema_root(SchemaProfile::Transitional)
+            .ends_with("schemas/ooxml-xsd/transitional"));
         assert!(bundled_schema_root(SchemaProfile::Strict).ends_with("schemas/ooxml-xsd/strict"));
     }
 
@@ -1133,8 +1149,8 @@ mod tests {
 
     #[test]
     fn test_validate_path_spec_skips_mce_content() {
-        let path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/simple_book.xlsx_ooxml/xl/workbook.xml");
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/simple_book.xlsx_ooxml/xl/workbook.xml");
         let used_schema = validate_path_spec(&path, SchemaProfile::Transitional).unwrap();
         assert!(!used_schema);
     }

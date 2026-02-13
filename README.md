@@ -4,10 +4,10 @@ Diffable, mergeable version control for OOXML files.
 
 ## Core Commands
 
-- `check-in <file.xlsx>...`
-  - Converts compiled OOXML bundles (`.xlsx`) into normalized raw trees (`*_ooxml`).
-- `check-out <dir.xlsx_ooxml>...`
-  - Converts raw OOXML trees (`*_ooxml`) back into compiled bundles (`.xlsx`).
+- `check-in <file>...`
+  - Converts compiled OOXML bundles (for example `.xlsx`, `.docx`, `.pptx`) into normalized raw trees (`*_ooxml`).
+- `check-out <dir_ooxml>...`
+  - Converts raw OOXML trees (`*_ooxml`) back into compiled bundles (original extension preserved from the directory name).
 - `validate [--mode <basic|spec>] [--profile <transitional|strict>] [paths...]`
   - `--mode basic` (default): strict XML syntax validation for OOXML parts (`.xml` and `.rels`).
   - `--mode spec`: validates XML syntax and then validates supported OOXML parts against bundled ECMA-376 XSDs in `schemas/ooxml-xsd/`.
@@ -25,7 +25,7 @@ ooxml-version-control git-install --repo .
 
 Installed hooks:
 
-- `.git/hooks/pre-commit` -> reminds you to run `check-in` with explicit `.xlsx` paths.
+- `.git/hooks/pre-commit` -> reminds you to run `check-in` with explicit OOXML bundle paths.
 - `.git/hooks/post-checkout` -> reminds you to run `check-out` with explicit `*_ooxml` paths if needed.
 - `.git/hooks/post-merge` -> reminds you to run `check-out` with explicit `*_ooxml` paths if needed.
 
@@ -37,10 +37,10 @@ ooxml-version-control git-install --repo . --force
 
 ## Recommended Daily Flow
 
-1. Open/edit `file.xlsx` as usual.
-2. Run `check-in path/to/file.xlsx` for each workbook you want to convert.
+1. Open/edit your OOXML file as usual (for example `file.xlsx`, `file.docx`, or `file.pptx`).
+2. Run `check-in path/to/file.ext` for each bundle you want to convert.
 3. Commit your desired files.
-4. Run `check-out path/to/file.xlsx_ooxml` when you need a compiled workbook from raw OOXML.
+4. Run `check-out path/to/file.ext_ooxml` when you need a compiled bundle from raw OOXML.
 
 ## Notes
 
