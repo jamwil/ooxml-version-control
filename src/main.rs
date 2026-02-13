@@ -18,7 +18,7 @@ use tempfile::tempdir;
 #[command(name = "ocv")]
 #[command(version = "0.1.0")]
 #[command(author = "James Williams <james@jamwil.com>")]
-#[command(about = "Diffable, mergeable version control for OOXML files.")]
+#[command(about = "Diffable, mergeable version control for OOXML files (alpha).")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -26,25 +26,25 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Check in files or directories
+    /// Convert compiled OOXML bundles (.xlsx/.docx/.pptx) into normalized raw OOXML trees (*_ooxml)
     CheckIn {
-        /// Files or directories to check in
+        /// Input compiled OOXML bundle files
         #[arg(required = true)]
         paths: Vec<PathBuf>,
         /// Explicit output raw-tree directory path (single input only)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Check out files or directories
+    /// Convert raw OOXML trees (*_ooxml) back into compiled OOXML bundles
     CheckOut {
-        /// Files or directories to check out
+        /// Input raw OOXML tree directories
         #[arg(required = true)]
         paths: Vec<PathBuf>,
         /// Explicit output compiled bundle file path (single input only)
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Install git hooks for a raw-commit / compiled-worktree workflow
+    /// Install reminder-only git hooks that print guidance (no automatic check-in/check-out)
     GitInstall {
         /// Repository path where hooks should be installed
         #[arg(long, default_value = ".")]

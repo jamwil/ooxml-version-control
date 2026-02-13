@@ -2,6 +2,8 @@
 
 Diffable, mergeable version control for OOXML files.
 
+Status: Alpha software. Expect breaking changes and validate outputs in your workflow before production use.
+
 CLI binary name:
 - `ocv`
 
@@ -23,7 +25,7 @@ CLI binary name:
 
 ## Hook Setup
 
-Install helper hooks once in your repository:
+Install reminder-only hooks once in your repository:
 
 ```bash
 ocv git-install --repo .
@@ -34,6 +36,8 @@ Installed hooks:
 - `.git/hooks/pre-commit` -> reminds you to run `check-in` with explicit OOXML bundle paths.
 - `.git/hooks/post-checkout` -> reminds you to run `check-out` with explicit `*_ooxml` paths if needed.
 - `.git/hooks/post-merge` -> reminds you to run `check-out` with explicit `*_ooxml` paths if needed.
+
+These hooks only print `echo` reminders. They do not invoke `ocv check-in` or `ocv check-out` automatically.
 
 Use `--force` to overwrite existing hook files:
 
@@ -58,6 +62,7 @@ ocv check-out -o path/to/build/my_bundle.xlsx path/to/raw/my_bundle.xlsx_ooxml
 ## Notes
 
 - Hooks call the same compiled binary path used during installation.
+- `git-install` creates reminder hooks only; it does not automate conversion commands.
 - If hooks do not run, ensure they are executable and your git config allows local hooks.
 - Conversion commands require explicit paths.
 - Binary OOXML parts (for example macro payloads like `vbaProject.bin`) are passed through unchanged; validation only checks `.xml` and `.rels` parts.
