@@ -15,7 +15,7 @@ use std::process::Command;
 use tempfile::tempdir;
 
 #[derive(Parser)]
-#[command(name = "ooxml-version-control")]
+#[command(name = "ocv")]
 #[command(version = "0.1.0")]
 #[command(author = "James Williams <james@jamwil.com>")]
 #[command(about = "Diffable, mergeable version control for OOXML files.")]
@@ -220,17 +220,17 @@ fn git_install(repo: &PathBuf, force: bool) {
     fs::create_dir_all(&hooks_dir).unwrap();
 
     let pre_commit = format!(
-        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-in with explicit OOXML bundle paths (for example .xlsx/.docx/.pptx) before committing.\" >&2\n"
+        "#!/bin/sh\nset -e\n\necho \"ocv: run check-in with explicit OOXML bundle paths (for example .xlsx/.docx/.pptx) before committing.\" >&2\n"
     );
     install_hook(&hooks_dir.join("pre-commit"), &pre_commit, force);
 
     let post_checkout = format!(
-        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-out with explicit *_ooxml paths after checkout if needed.\" >&2\n"
+        "#!/bin/sh\nset -e\n\necho \"ocv: run check-out with explicit *_ooxml paths after checkout if needed.\" >&2\n"
     );
     install_hook(&hooks_dir.join("post-checkout"), &post_checkout, force);
 
     let post_merge = format!(
-        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-out with explicit *_ooxml paths after merge if needed.\" >&2\n"
+        "#!/bin/sh\nset -e\n\necho \"ocv: run check-out with explicit *_ooxml paths after merge if needed.\" >&2\n"
     );
     install_hook(&hooks_dir.join("post-merge"), &post_merge, force);
 }
@@ -641,7 +641,7 @@ fn validate_paths(paths: &[PathBuf], mode: ValidationMode, profile: SchemaProfil
 fn main() {
     let env = Env::default().filter_or("MY_LOG_LEVEL", "info");
     env_logger::init_from_env(env);
-    log::info!("Starting ooxml-version-control");
+    log::info!("Starting ocv");
 
     let cli = Cli::parse();
 

@@ -2,6 +2,9 @@
 
 Diffable, mergeable version control for OOXML files.
 
+CLI binary name:
+- `ocv`
+
 ## Core Commands
 
 - `check-in <file>...`
@@ -20,7 +23,7 @@ Diffable, mergeable version control for OOXML files.
 Install helper hooks once in your repository:
 
 ```bash
-ooxml-version-control git-install --repo .
+ocv git-install --repo .
 ```
 
 Installed hooks:
@@ -32,7 +35,7 @@ Installed hooks:
 Use `--force` to overwrite existing hook files:
 
 ```bash
-ooxml-version-control git-install --repo . --force
+ocv git-install --repo . --force
 ```
 
 ## Recommended Daily Flow

@@ -7,9 +7,18 @@ use std::process::Command as ProcessCommand;
 use tempfile::tempdir;
 
 #[test]
+fn test_ocv_binary_runs_help() {
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
+    cmd.arg("--help")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Diffable, mergeable version control for OOXML files"));
+}
+
+#[test]
 fn test_check_in_with_valid_file() {
     let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
     let test_file_path_1: PathBuf;
     let test_file_path_2: PathBuf;
     let output_dir_1: PathBuf;
@@ -95,7 +104,7 @@ fn test_check_in_with_valid_file() {
 
 #[test]
 fn test_check_in_with_invalid_file() {
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
 
     let invalid_file = PathBuf::from("tests/fixtures/non_existent_file.xlsx");
 
@@ -109,7 +118,7 @@ fn test_check_in_with_invalid_file() {
 #[test]
 fn test_check_out_with_valid_file() {
     let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
     let test_folder_path: PathBuf;
     let output_file: PathBuf;
 
@@ -134,7 +143,7 @@ fn test_check_out_with_valid_file() {
 
 #[test]
 fn test_check_out_with_invalid_file() {
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
 
     let invalid_folder = PathBuf::from("tests/fixtures/non_existent_folder.xlsx_ooxml");
 
@@ -169,7 +178,7 @@ fn test_git_install_creates_hooks() {
         .unwrap();
     assert!(init_status.success());
 
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
     cmd.arg("git-install")
         .arg("--repo")
         .arg(&repo)
@@ -233,7 +242,7 @@ fn test_check_in_out_and_validate_spec_with_docx_bundle() {
     let compiled_docx = temp_dir.path().join("sample.docx");
     filesystem::zip(&raw_dir, &compiled_docx);
 
-    let mut check_in_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut check_in_cmd = Command::cargo_bin("ocv").unwrap();
     check_in_cmd
         .arg("check-in")
         .arg(&compiled_docx)
@@ -244,7 +253,7 @@ fn test_check_in_out_and_validate_spec_with_docx_bundle() {
     assert!(checked_in_dir.is_dir());
     assert!(checked_in_dir.join("word/document.xml").is_file());
 
-    let mut validate_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut validate_cmd = Command::cargo_bin("ocv").unwrap();
     validate_cmd
         .arg("validate")
         .arg("--mode")
@@ -260,7 +269,7 @@ fn test_check_in_out_and_validate_spec_with_docx_bundle() {
     if rebuilt_docx.exists() {
         fs::remove_file(&rebuilt_docx).unwrap();
     }
-    let mut check_out_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut check_out_cmd = Command::cargo_bin("ocv").unwrap();
     check_out_cmd
         .arg("check-out")
         .arg(&checked_in_dir)
@@ -335,7 +344,7 @@ fn test_macro_binary_parts_are_passed_through_for_xlsm() {
     let compiled_xlsm = temp_dir.path().join("macro_book.xlsm");
     filesystem::zip(&raw_dir, &compiled_xlsm);
 
-    let mut check_in_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut check_in_cmd = Command::cargo_bin("ocv").unwrap();
     check_in_cmd
         .arg("check-in")
         .arg(&compiled_xlsm)
@@ -347,7 +356,7 @@ fn test_macro_binary_parts_are_passed_through_for_xlsm() {
     let checked_in_vba = fs::read(checked_in_dir.join("xl/vbaProject.bin")).unwrap();
     assert_eq!(checked_in_vba, vba_payload);
 
-    let mut validate_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut validate_cmd = Command::cargo_bin("ocv").unwrap();
     validate_cmd
         .arg("validate")
         .arg(&checked_in_dir)
@@ -358,7 +367,7 @@ fn test_macro_binary_parts_are_passed_through_for_xlsm() {
     if compiled_xlsm.exists() {
         fs::remove_file(&compiled_xlsm).unwrap();
     }
-    let mut check_out_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut check_out_cmd = Command::cargo_bin("ocv").unwrap();
     check_out_cmd
         .arg("check-out")
         .arg(&checked_in_dir)
@@ -374,7 +383,7 @@ fn test_macro_binary_parts_are_passed_through_for_xlsm() {
 #[test]
 fn test_validate_with_valid_dir() {
     let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
     let test_folder_path: PathBuf;
 
     {
@@ -392,7 +401,7 @@ fn test_validate_with_valid_dir() {
 
 #[test]
 fn test_validate_with_invalid_xml_file() {
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
 
     let temp_dir = tempdir().unwrap();
     let invalid_file = temp_dir.path().join("broken.xml");
@@ -407,7 +416,7 @@ fn test_validate_with_invalid_xml_file() {
 
 #[test]
 fn test_validate_spec_with_supported_part() {
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
     let part = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml");
 
     cmd.arg("validate")
@@ -423,7 +432,7 @@ fn test_validate_spec_with_supported_part() {
 
 #[test]
 fn test_validate_spec_with_fixture_dir() {
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
     let dir = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
 
     cmd.arg("validate")
