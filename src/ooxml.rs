@@ -124,6 +124,10 @@ pub struct OoxmlBuffer {
 }
 
 impl OoxmlBuffer {
+    fn local_name(name: &[u8]) -> &[u8] {
+        name.rsplit(|b| *b == b':').next().unwrap_or(name)
+    }
+
     pub fn new(file_path: &str) -> Self {
         let mut output = Vec::new();
         let mut writer = Writer::new(Cursor::new(&mut output));
@@ -156,6 +160,64 @@ impl OoxmlBuffer {
                 Event::Eof => break,
                 Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {}
                 event => writer.write_event(event).unwrap(),
+            }
+        }
+
+        self.buffer = output;
+        self
+    }
+
+    fn remove_elements_by_local_name(mut self, local_names: &[&str]) -> Self {
+        let mut reader = Reader::from_reader(&self.buffer[..]);
+        let mut output = Vec::new();
+        let mut writer = Writer::new(Cursor::new(&mut output));
+        let local_names = local_names
+            .iter()
+            .map(|n| n.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        let mut skip_depth = 0usize;
+
+        loop {
+            match reader.read_event().unwrap() {
+                Event::Eof => break,
+                Event::Start(e) => {
+                    if skip_depth > 0 {
+                        skip_depth += 1;
+                        continue;
+                    }
+
+                    let is_target = local_names
+                        .iter()
+                        .any(|n| Self::local_name(e.name().as_ref()) == n.as_slice());
+                    if is_target {
+                        skip_depth = 1;
+                    } else {
+                        writer.write_event(Event::Start(e.to_owned())).unwrap();
+                    }
+                }
+                Event::End(e) => {
+                    if skip_depth > 0 {
+                        skip_depth -= 1;
+                    } else {
+                        writer.write_event(Event::End(e.to_owned())).unwrap();
+                    }
+                }
+                Event::Empty(e) => {
+                    if skip_depth > 0 {
+                        continue;
+                    }
+                    let is_target = local_names
+                        .iter()
+                        .any(|n| Self::local_name(e.name().as_ref()) == n.as_slice());
+                    if !is_target {
+                        writer.write_event(Event::Empty(e.to_owned())).unwrap();
+                    }
+                }
+                event => {
+                    if skip_depth == 0 {
+                        writer.write_event(event).unwrap();
+                    }
+                }
             }
         }
 
@@ -439,6 +501,14 @@ impl OoxmlBuffer {
 
         self.buffer = output;
         self
+    }
+
+    pub fn remove_volatile_core_properties(self) -> Self {
+        self.remove_elements_by_local_name(&["lastModifiedBy", "revision", "modified"])
+    }
+
+    pub fn remove_volatile_app_properties(self) -> Self {
+        self.remove_elements_by_local_name(&["TotalTime", "AppVersion"])
     }
 
     pub fn save(self) {
@@ -860,5 +930,69 @@ mod tests {
         assert!(worksheet.contains(r#"t="s""#));
         assert!(worksheet.contains("<v>not-a-number</v>"));
         assert!(!worksheet.contains(r#"t="inlineStr""#));
+    }
+
+    #[test]
+    fn test_remove_volatile_core_properties_with_namespaced_tags() {
+        let temp_dir = tempdir().unwrap();
+        let core_path = temp_dir.path().join("core.xml");
+        fs::write(
+            &core_path,
+            r#"<cp:coreProperties xmlns:cp="x" xmlns:dcterms="y"><cp:lastModifiedBy>A</cp:lastModifiedBy><cp:revision>9</cp:revision><dcterms:modified>2026-01-01T00:00:00Z</dcterms:modified><dcterms:created>2020-01-01T00:00:00Z</dcterms:created></cp:coreProperties>"#,
+        )
+        .unwrap();
+
+        OoxmlBuffer::new(core_path.to_str().unwrap())
+            .remove_volatile_core_properties()
+            .save();
+
+        let xml = fs::read_to_string(core_path).unwrap();
+        assert!(!xml.contains("lastModifiedBy"));
+        assert!(!xml.contains("<cp:revision>"));
+        assert!(!xml.contains("dcterms:modified"));
+        assert!(xml.contains("dcterms:created"));
+    }
+
+    #[test]
+    fn test_remove_volatile_app_properties() {
+        let temp_dir = tempdir().unwrap();
+        let app_path = temp_dir.path().join("app.xml");
+        fs::write(
+            &app_path,
+            r#"<Properties xmlns="x"><Application>Word</Application><TotalTime>10</TotalTime><AppVersion>99</AppVersion></Properties>"#,
+        )
+        .unwrap();
+
+        OoxmlBuffer::new(app_path.to_str().unwrap())
+            .remove_volatile_app_properties()
+            .save();
+
+        let xml = fs::read_to_string(app_path).unwrap();
+        assert!(xml.contains("<Application>Word</Application>"));
+        assert!(!xml.contains("<TotalTime>"));
+        assert!(!xml.contains("<AppVersion>"));
+    }
+
+    #[test]
+    fn test_remove_volatile_app_properties_with_nested_and_empty_elements() {
+        let temp_dir = tempdir().unwrap();
+        let app_path = temp_dir.path().join("app_nested.xml");
+        fs::write(
+            &app_path,
+            r#"<Properties xmlns="x"><Company/><TotalTime><nested><leaf/></nested></TotalTime><AppVersion/><Application>Excel</Application></Properties>"#,
+        )
+        .unwrap();
+
+        OoxmlBuffer::new(app_path.to_str().unwrap())
+            .remove_volatile_app_properties()
+            .save();
+
+        let xml = fs::read_to_string(app_path).unwrap();
+        assert!(xml.contains("<Company/>"));
+        assert!(xml.contains("<Application>Excel</Application>"));
+        assert!(!xml.contains("<TotalTime>"));
+        assert!(!xml.contains("<nested>"));
+        assert!(!xml.contains("<leaf/>"));
+        assert!(!xml.contains("<AppVersion/>"));
     }
 }

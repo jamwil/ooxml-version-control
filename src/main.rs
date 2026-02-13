@@ -79,6 +79,21 @@ fn main() {
                             .save();
                     }
 
+                    // Drop volatile document metadata that changes frequently and
+                    // creates noisy diffs/conflicts across environments.
+                    let core_props = work_dir.join("docProps/core.xml");
+                    if core_props.exists() {
+                        OoxmlBuffer::new(core_props.to_str().unwrap())
+                            .remove_volatile_core_properties()
+                            .save();
+                    }
+                    let app_props = work_dir.join("docProps/app.xml");
+                    if app_props.exists() {
+                        OoxmlBuffer::new(app_props.to_str().unwrap())
+                            .remove_volatile_app_properties()
+                            .save();
+                    }
+
                     // Get the shared strings
                     let ss_file = work_dir.join("xl/sharedStrings.xml");
                     let default_sst = shared_strings::Sst {
@@ -100,6 +115,14 @@ fn main() {
                         OoxmlBuffer::new(xml_file.to_str().unwrap())
                             .inline_shared_strings(&sst)
                             .save();
+                    }
+
+                    // Normalize all XML-like parts to keep check-in output deterministic
+                    // and easier to diff/merge.
+                    let xml_like_files =
+                        filesystem::collect_files_by_extension(&work_dir, &["xml", "rels"]);
+                    for xml_file in xml_like_files {
+                        OoxmlBuffer::new(xml_file.to_str().unwrap()).save();
                     }
 
                     filesystem::copy_dir(&work_dir, &output_dir);

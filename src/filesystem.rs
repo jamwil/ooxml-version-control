@@ -72,6 +72,26 @@ pub fn collect_files(dir: &PathBuf, pattern: &str) -> Vec<PathBuf> {
     glob(pattern).unwrap().filter_map(Result::ok).collect()
 }
 
+/// Recursively collect files by extension (without leading dots).
+pub fn collect_files_by_extension(dir: &PathBuf, extensions: &[&str]) -> Vec<PathBuf> {
+    WalkDir::new(dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().is_file())
+        .filter(|entry| {
+            let ext = entry.path().extension().and_then(|e| e.to_str());
+            ext.map(|e| {
+                let e = e.to_ascii_lowercase();
+                extensions
+                    .iter()
+                    .any(|target| e == target.to_ascii_lowercase())
+            })
+            .unwrap_or(false)
+        })
+        .map(|entry| entry.path().to_path_buf())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +159,17 @@ mod tests {
             let path = output_dir.join(expected_file);
             assert_eq!(path.is_file(), true);
         }
+    }
+
+    #[test]
+    fn test_collect_files_by_extension() {
+        let input_dir = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
+        let files = collect_files_by_extension(&input_dir, &["xml", "rels"]);
+
+        assert!(files.iter().any(|p| p.ends_with("docProps/core.xml")));
+        assert!(files
+            .iter()
+            .any(|p| p.ends_with("xl/_rels/workbook.xml.rels")));
+        assert!(!files.is_empty());
     }
 }

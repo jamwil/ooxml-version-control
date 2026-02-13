@@ -85,6 +85,40 @@ fn test_check_in_with_valid_file() {
             !content_types_2.contains("/xl/calcChain.xml"),
             "[Content_Types].xml should not include calcChain override in output 2"
         );
+
+        let core_props_1 = fs::read_to_string(output_dir_1.join("docProps/core.xml"))
+            .expect("core props readable");
+        let core_props_2 = fs::read_to_string(output_dir_2.join("docProps/core.xml"))
+            .expect("core props readable");
+        for core_props in [&core_props_1, &core_props_2] {
+            assert!(
+                !core_props.contains("lastModifiedBy"),
+                "core.xml should not include cp:lastModifiedBy"
+            );
+            assert!(
+                !core_props.contains("<cp:revision>"),
+                "core.xml should not include cp:revision"
+            );
+            assert!(
+                !core_props.contains("dcterms:modified"),
+                "core.xml should not include dcterms:modified"
+            );
+        }
+
+        let app_props_1 =
+            fs::read_to_string(output_dir_1.join("docProps/app.xml")).expect("app props readable");
+        let app_props_2 =
+            fs::read_to_string(output_dir_2.join("docProps/app.xml")).expect("app props readable");
+        for app_props in [&app_props_1, &app_props_2] {
+            assert!(
+                !app_props.contains("<TotalTime>"),
+                "app.xml should not include TotalTime"
+            );
+            assert!(
+                !app_props.contains("<AppVersion>"),
+                "app.xml should not include AppVersion"
+            );
+        }
     }
 
     assert_ne!(output_dir_1.is_dir(), true);
