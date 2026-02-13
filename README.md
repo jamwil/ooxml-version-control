@@ -32,8 +32,11 @@ The repository can be configured so that:
   - If no paths are given, it discovers tracked `*_ooxml` trees via `git ls-files`.
 - `git-install [--repo <path>] [--force]`
   - Installs git hooks for automatic sync behavior.
-- `validate [paths...]`
-  - Strictly validates XML syntax for OOXML parts (`.xml` and `.rels`).
+- `validate [--mode <basic|spec>] [--profile <transitional|strict>] [paths...]`
+  - `--mode basic` (default): strict XML syntax validation for OOXML parts (`.xml` and `.rels`).
+  - `--mode spec`: validates XML syntax and then validates supported OOXML parts against bundled ECMA-376 XSDs in `schemas/ooxml-xsd/`.
+  - `--profile` selects the schema set for spec mode (`transitional` default, or `strict`).
+  - Parts using Markup Compatibility and Extensibility (MCE) constructs are currently skipped in `spec` mode (Part 5 preprocessing is not implemented yet).
   - Paths can be files or directories.
   - If no paths are provided, it validates XML files under tracked `*_ooxml` trees.
 

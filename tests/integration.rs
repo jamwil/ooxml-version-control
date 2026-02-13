@@ -269,3 +269,33 @@ fn test_validate_with_invalid_xml_file() {
         .failure()
         .stderr(predicates::str::contains("XML validation failed"));
 }
+
+#[test]
+fn test_validate_spec_with_supported_part() {
+    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let part = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml");
+
+    cmd.arg("validate")
+        .arg("--mode")
+        .arg("spec")
+        .arg("--profile")
+        .arg("transitional")
+        .arg(&part)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("OOXML spec validation passed"));
+}
+
+#[test]
+fn test_validate_spec_with_fixture_dir() {
+    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let dir = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
+
+    cmd.arg("validate")
+        .arg("--mode")
+        .arg("spec")
+        .arg(&dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("schema-validated"));
+}
