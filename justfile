@@ -1,7 +1,7 @@
 # Run the tests with coverage
 test:
     # Requires cargo-tarpaulin to be installed
-    cargo tarpaulin
+    cargo tarpaulin --out Stdout --fail-under 100
 
 # Format the unbundled OOXML files in the fixtures directory
 format-fixtures:

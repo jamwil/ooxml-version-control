@@ -6,14 +6,13 @@ use ooxml_version_control::ooxml::schemas::shared_strings;
 use ooxml_version_control::ooxml::{read_xml_file, validate_xml_file, OoxmlBuffer};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::{Reader, Writer};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::fs::remove_file;
 use std::io::{self, Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::tempdir;
-use walkdir::WalkDir;
 
 #[derive(Parser)]
 #[command(name = "ooxml-version-control")]
@@ -30,24 +29,13 @@ enum Commands {
     /// Check in files or directories
     CheckIn {
         /// Files or directories to check in
+        #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
     /// Check out files or directories
     CheckOut {
         /// Files or directories to check out
-        paths: Vec<PathBuf>,
-    },
-    /// Convert compiled .xlsx files to raw *_ooxml trees
-    VcsIn {
-        /// Files to convert. If omitted, auto-discovers .xlsx files.
-        paths: Vec<PathBuf>,
-        /// Stage *_ooxml output and unstage compiled .xlsx files
-        #[arg(long)]
-        stage: bool,
-    },
-    /// Convert raw *_ooxml trees to compiled .xlsx files
-    VcsOut {
-        /// Directories to convert. If omitted, auto-discovers tracked *_ooxml trees.
+        #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
     /// Install git hooks for a raw-commit / compiled-worktree workflow
@@ -62,6 +50,7 @@ enum Commands {
     /// Validate XML syntax for OOXML raw trees (.xml/.rels)
     Validate {
         /// Files and/or directories to validate
+        #[arg(required = true)]
         paths: Vec<PathBuf>,
         /// Validation mode: basic XML syntax or OOXML spec schema checks
         #[arg(long, value_enum, default_value_t = ValidationMode::Basic)]
@@ -190,22 +179,6 @@ fn check_out_path(path: &PathBuf) {
     log::info!("Checked out: {:?}", output_file);
 }
 
-fn discover_xlsx_files() -> Vec<PathBuf> {
-    WalkDir::new(".")
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().is_file())
-        .filter(|entry| entry.file_name().to_str().unwrap_or("").ends_with(".xlsx"))
-        .filter(|entry| {
-            !entry
-                .path()
-                .components()
-                .any(|c| c.as_os_str() == ".git" || c.as_os_str() == "target")
-        })
-        .map(|entry| entry.path().to_path_buf())
-        .collect()
-}
-
 fn git_output(args: &[&str], cwd: &PathBuf) -> Option<String> {
     let output = Command::new("git")
         .args(args)
@@ -221,107 +194,6 @@ fn git_output(args: &[&str], cwd: &PathBuf) -> Option<String> {
 fn find_repo_root(path: &PathBuf) -> Option<PathBuf> {
     let output = git_output(&["rev-parse", "--show-toplevel"], path)?;
     Some(PathBuf::from(output.trim()))
-}
-
-fn discover_tracked_ooxml_dirs(base: &PathBuf) -> Vec<PathBuf> {
-    let mut dirs = BTreeSet::new();
-    let Some(files) = git_output(&["ls-files"], base) else {
-        return vec![];
-    };
-    for line in files.lines() {
-        let path = PathBuf::from(line);
-        if let Some(component) = path
-            .components()
-            .find(|c| c.as_os_str().to_str().unwrap_or("").ends_with("_ooxml"))
-        {
-            let component = component.as_os_str().to_string_lossy().to_string();
-            if let Some(idx) = line.find(&component) {
-                dirs.insert(base.join(&line[..idx + component.len()]));
-            }
-        }
-    }
-    dirs.into_iter().collect()
-}
-
-fn discover_staged_xlsx_files(base: &PathBuf) -> Vec<PathBuf> {
-    let mut files = vec![];
-    let Some(output) = git_output(
-        &["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
-        base,
-    ) else {
-        return files;
-    };
-    for line in output.lines() {
-        if line.ends_with(".xlsx") {
-            files.push(base.join(line));
-        }
-    }
-    files
-}
-
-fn vcs_in(paths: &[PathBuf], stage: bool) {
-    if stage {
-        let cwd = PathBuf::from(".");
-        let Some(repo_root) = find_repo_root(&cwd) else {
-            panic!("Error: --stage requires running inside a git repository");
-        };
-
-        let stage_targets: Vec<PathBuf> = if paths.is_empty() {
-            discover_staged_xlsx_files(&repo_root)
-        } else {
-            paths.to_vec()
-        };
-
-        for path in &stage_targets {
-            check_in_path(path);
-        }
-
-        for path in stage_targets {
-            let file_name = path.file_name().unwrap().to_str().unwrap();
-            let output_dir = path.with_file_name(file_name.to_owned() + "_ooxml");
-
-            let add_status = Command::new("git")
-                .arg("add")
-                .arg("--all")
-                .arg("--")
-                .arg(&output_dir)
-                .current_dir(&repo_root)
-                .status()
-                .unwrap();
-            if !add_status.success() {
-                panic!("Error: failed to stage {:?}", output_dir);
-            }
-
-            let _ = Command::new("git")
-                .arg("reset")
-                .arg("-q")
-                .arg("--")
-                .arg(&path)
-                .current_dir(&repo_root)
-                .status();
-        }
-    } else {
-        let discovered_paths = if paths.is_empty() {
-            discover_xlsx_files()
-        } else {
-            paths.to_vec()
-        };
-
-        for path in discovered_paths {
-            check_in_path(&path);
-        }
-    }
-}
-
-fn vcs_out(paths: &[PathBuf]) {
-    let discovered_paths = if paths.is_empty() {
-        discover_tracked_ooxml_dirs(&PathBuf::from("."))
-    } else {
-        paths.to_vec()
-    };
-    for path in discovered_paths {
-        check_out_path(&path);
-    }
 }
 
 fn install_hook(path: &PathBuf, content: &str, force: bool) {
@@ -346,16 +218,20 @@ fn git_install(repo: &PathBuf, force: bool) {
         find_repo_root(repo).unwrap_or_else(|| panic!("Error: {:?} is not a git repository", repo));
     let hooks_dir = repo_root.join(".git/hooks");
     fs::create_dir_all(&hooks_dir).unwrap();
-    let exe = std::env::current_exe().unwrap();
-    let exe_display = exe.to_string_lossy();
 
-    let pre_commit = format!("#!/bin/sh\nset -e\n\"{}\" vcs-in --stage\n", exe_display);
+    let pre_commit = format!(
+        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-in with explicit .xlsx paths before committing.\" >&2\n"
+    );
     install_hook(&hooks_dir.join("pre-commit"), &pre_commit, force);
 
-    let post_checkout = format!("#!/bin/sh\nset -e\n\"{}\" vcs-out\n", exe_display);
+    let post_checkout = format!(
+        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-out with explicit *_ooxml paths after checkout if needed.\" >&2\n"
+    );
     install_hook(&hooks_dir.join("post-checkout"), &post_checkout, force);
 
-    let post_merge = format!("#!/bin/sh\nset -e\n\"{}\" vcs-out\n", exe_display);
+    let post_merge = format!(
+        "#!/bin/sh\nset -e\n\necho \"ooxml-version-control: run check-out with explicit *_ooxml paths after merge if needed.\" >&2\n"
+    );
     install_hook(&hooks_dir.join("post-merge"), &post_merge, force);
 }
 
@@ -692,14 +568,7 @@ fn validate_path_spec(file_path: &Path, profile: SchemaProfile) -> Result<bool, 
 }
 
 fn validate_paths(paths: &[PathBuf], mode: ValidationMode, profile: SchemaProfile) {
-    let mut targets: Vec<PathBuf> = if paths.is_empty() {
-        discover_tracked_ooxml_dirs(&PathBuf::from("."))
-            .into_iter()
-            .flat_map(|dir| filesystem::collect_files_by_extension(&dir, &["xml", "rels"]))
-            .collect()
-    } else {
-        paths.iter().flat_map(validation_targets_for_path).collect()
-    };
+    let mut targets: Vec<PathBuf> = paths.iter().flat_map(validation_targets_for_path).collect();
 
     if targets.is_empty() {
         panic!("Error: No XML files found to validate");
@@ -772,8 +641,6 @@ fn main() {
                 check_out_path(path);
             }
         }
-        Commands::VcsIn { paths, stage } => vcs_in(paths, *stage),
-        Commands::VcsOut { paths } => vcs_out(paths),
         Commands::GitInstall { repo, force } => git_install(repo, *force),
         Commands::Validate {
             paths,
@@ -817,37 +684,6 @@ mod tests {
         }
     }
 
-    fn init_git_repo(dir: &PathBuf) {
-        assert!(Command::new("git")
-            .arg("init")
-            .arg(dir)
-            .status()
-            .unwrap()
-            .success());
-    }
-
-    #[test]
-    fn test_discover_xlsx_files_filters_git_and_target() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        let _guard = CwdGuard::to(&root);
-
-        fs::create_dir_all(root.join(".git")).unwrap();
-        fs::create_dir_all(root.join("target")).unwrap();
-        fs::create_dir_all(root.join("docs")).unwrap();
-
-        fs::write(root.join("keep.xlsx"), b"x").unwrap();
-        fs::write(root.join(".git/skip.xlsx"), b"x").unwrap();
-        fs::write(root.join("target/skip.xlsx"), b"x").unwrap();
-        fs::write(root.join("docs/readme.txt"), b"x").unwrap();
-
-        let mut files = discover_xlsx_files();
-        files.sort();
-
-        assert_eq!(files, vec![PathBuf::from("./keep.xlsx")]);
-    }
-
     #[test]
     fn test_git_output_and_find_repo_root_fail_outside_repo() {
         let _lock = lock_cwd();
@@ -857,165 +693,6 @@ mod tests {
 
         assert!(git_output(&["rev-parse", "--show-toplevel"], &root).is_none());
         assert!(find_repo_root(&root).is_none());
-    }
-
-    #[test]
-    fn test_discover_tracked_ooxml_dirs_returns_empty_outside_repo() {
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-
-        let dirs = discover_tracked_ooxml_dirs(&root);
-        assert!(dirs.is_empty());
-    }
-
-    #[test]
-    fn test_discover_tracked_ooxml_dirs_in_repo() {
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        init_git_repo(&root);
-
-        let tracked = root.join("book.xlsx_ooxml/xl/workbook.xml");
-        fs::create_dir_all(tracked.parent().unwrap()).unwrap();
-        fs::write(&tracked, b"<x/>").unwrap();
-        fs::write(root.join("notes.txt"), b"n").unwrap();
-
-        assert!(Command::new("git")
-            .arg("add")
-            .arg("--all")
-            .current_dir(&root)
-            .status()
-            .unwrap()
-            .success());
-
-        let dirs = discover_tracked_ooxml_dirs(&root);
-        assert_eq!(dirs, vec![root.join("book.xlsx_ooxml")]);
-    }
-
-    #[test]
-    fn test_discover_staged_xlsx_files() {
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        init_git_repo(&root);
-
-        fs::write(root.join("a.xlsx"), b"a").unwrap();
-        fs::write(root.join("b.txt"), b"b").unwrap();
-        assert!(Command::new("git")
-            .arg("add")
-            .arg("a.xlsx")
-            .arg("b.txt")
-            .current_dir(&root)
-            .status()
-            .unwrap()
-            .success());
-
-        let files = discover_staged_xlsx_files(&root);
-        assert_eq!(files, vec![root.join("a.xlsx")]);
-    }
-
-    #[test]
-    fn test_vcs_in_no_paths_no_stage() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        let _guard = CwdGuard::to(&root);
-
-        vcs_in(&[], false);
-    }
-
-    #[test]
-    fn test_vcs_in_stage_with_no_paths_uses_staged_files_only() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        init_git_repo(&root);
-        let _guard = CwdGuard::to(&root);
-
-        let fixture =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/simple_book.xlsx");
-        let workbook = root.join("book.xlsx");
-        let untouched = root.join("untouched.xlsx");
-        fs::copy(fixture, &workbook).unwrap();
-        fs::copy(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/simple_book.xlsx"),
-            &untouched,
-        )
-        .unwrap();
-
-        assert!(Command::new("git")
-            .arg("add")
-            .arg("book.xlsx")
-            .current_dir(&root)
-            .status()
-            .unwrap()
-            .success());
-
-        vcs_in(&[], true);
-
-        assert!(root.join("book.xlsx_ooxml").is_dir());
-        assert!(!root.join("untouched.xlsx_ooxml").exists());
-    }
-
-    #[test]
-    fn test_vcs_in_stage_requires_git_repo() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        let _guard = CwdGuard::to(&root);
-
-        let result = panic::catch_unwind(|| vcs_in(&[], true));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_vcs_in_stage_panics_when_git_add_fails() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        init_git_repo(&root);
-        let _guard = CwdGuard::to(&root);
-
-        let fixture =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/simple_book.xlsx");
-        let workbook = root.join("book.xlsx");
-        fs::copy(fixture, &workbook).unwrap();
-
-        fs::write(root.join(".git/index.lock"), b"lock").unwrap();
-
-        let result = panic::catch_unwind(|| vcs_in(&[workbook], true));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_vcs_out_no_paths_uses_tracked_dirs() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        init_git_repo(&root);
-        let _guard = CwdGuard::to(&root);
-
-        let ooxml = root.join("book.xlsx_ooxml");
-        fs::create_dir_all(&ooxml).unwrap();
-        fs::write(ooxml.join("doc.xml"), b"<a/>").unwrap();
-        assert!(Command::new("git")
-            .arg("add")
-            .arg("--all")
-            .current_dir(&root)
-            .status()
-            .unwrap()
-            .success());
-
-        vcs_out(&[]);
-
-        assert!(root.join("book.xlsx").is_file());
-    }
-
-    #[test]
-    fn test_discover_staged_xlsx_files_returns_empty_outside_repo() {
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-
-        let files = discover_staged_xlsx_files(&root);
-        assert!(files.is_empty());
     }
 
     #[test]
@@ -1077,29 +754,6 @@ mod tests {
             validate_paths(&[root], ValidationMode::Basic, SchemaProfile::Transitional)
         });
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_paths_no_args_uses_tracked_ooxml_dirs() {
-        let _lock = lock_cwd();
-        let temp = tempdir().unwrap();
-        let root = temp.path().to_path_buf();
-        init_git_repo(&root);
-        let _guard = CwdGuard::to(&root);
-
-        let tracked_xml = root.join("book.xlsx_ooxml/xl/workbook.xml");
-        fs::create_dir_all(tracked_xml.parent().unwrap()).unwrap();
-        fs::write(&tracked_xml, "<workbook/>").unwrap();
-
-        assert!(Command::new("git")
-            .arg("add")
-            .arg("--all")
-            .current_dir(&root)
-            .status()
-            .unwrap()
-            .success());
-
-        validate_paths(&[], ValidationMode::Basic, SchemaProfile::Transitional);
     }
 
     #[test]

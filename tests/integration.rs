@@ -156,56 +156,6 @@ fn test_read_xml_file_from_integration_target() {
 }
 
 #[test]
-fn test_vcs_in_with_valid_file() {
-    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
-    let test_file_path: PathBuf;
-    let output_dir: PathBuf;
-
-    {
-        let temp_dir = tempdir().unwrap();
-        test_file_path = temp_dir.path().join("simple_book.xlsx");
-        fs::copy(&fixture, &test_file_path).unwrap();
-
-        cmd.arg("vcs-in")
-            .arg(&test_file_path)
-            .assert()
-            .success()
-            .stderr(predicates::str::contains("Checking in"));
-
-        output_dir = test_file_path.with_file_name("simple_book.xlsx_ooxml");
-        assert!(output_dir.is_dir());
-    }
-
-    assert!(!output_dir.is_dir());
-}
-
-#[test]
-fn test_vcs_out_with_valid_dir() {
-    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
-    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
-    let test_folder_path: PathBuf;
-    let output_file: PathBuf;
-
-    {
-        let temp_dir = tempdir().unwrap();
-        test_folder_path = temp_dir.path().join("simple_book.xlsx_ooxml");
-        filesystem::copy_dir(&fixture, &test_folder_path);
-
-        cmd.arg("vcs-out")
-            .arg(&test_folder_path)
-            .assert()
-            .success()
-            .stderr(predicates::str::contains("Checking out"));
-
-        output_file = test_folder_path.with_file_name("simple_book.xlsx");
-        assert!(output_file.is_file());
-    }
-
-    assert!(!output_file.is_file());
-}
-
-#[test]
 fn test_git_install_creates_hooks() {
     let temp_dir = tempdir().unwrap();
     let repo = temp_dir.path().to_path_buf();
@@ -231,9 +181,9 @@ fn test_git_install_creates_hooks() {
     let pre_commit = fs::read_to_string(repo.join(".git/hooks/pre-commit")).unwrap();
     let post_checkout = fs::read_to_string(repo.join(".git/hooks/post-checkout")).unwrap();
     let post_merge = fs::read_to_string(repo.join(".git/hooks/post-merge")).unwrap();
-    assert!(pre_commit.contains("vcs-in --stage"));
-    assert!(post_checkout.contains("vcs-out"));
-    assert!(post_merge.contains("vcs-out"));
+    assert!(pre_commit.contains("run check-in with explicit .xlsx paths"));
+    assert!(post_checkout.contains("run check-out with explicit *_ooxml paths"));
+    assert!(post_merge.contains("run check-out with explicit *_ooxml paths"));
 }
 
 #[test]
