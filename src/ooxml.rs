@@ -178,23 +178,6 @@ impl OoxmlBuffer {
         }
     }
 
-    pub fn tidy(mut self) -> Self {
-        let mut reader = Reader::from_reader(&self.buffer[..]);
-        let mut output = Vec::new();
-        let mut writer = Writer::new(Cursor::new(&mut output));
-
-        loop {
-            match reader.read_event().unwrap() {
-                Event::Eof => break,
-                Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {}
-                event => writer.write_event(event).unwrap(),
-            }
-        }
-
-        self.buffer = output;
-        self
-    }
-
     fn remove_elements_by_local_name(mut self, local_names: &[&str]) -> Self {
         let mut reader = Reader::from_reader(&self.buffer[..]);
         let mut output = Vec::new();
@@ -753,7 +736,6 @@ mod tests {
             read_xml_file("tests/fixtures/simple_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();
 
         OoxmlBuffer::new(output_file_path.to_str().unwrap())
-            .tidy()
             .inline_shared_strings(&sst)
             .save();
 
@@ -785,7 +767,6 @@ mod tests {
             read_xml_file("tests/fixtures/complex_book.xlsx_ooxml/xl/sharedStrings.xml").unwrap();
 
         OoxmlBuffer::new(output_file_path.to_str().unwrap())
-            .tidy()
             .inline_shared_strings(&sst)
             .save();
 
