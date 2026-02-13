@@ -178,6 +178,23 @@ impl OoxmlBuffer {
         }
     }
 
+    pub fn tidy(mut self) -> Self {
+        let mut reader = Reader::from_reader(&self.buffer[..]);
+        let mut output = Vec::new();
+        let mut writer = Writer::new(Cursor::new(&mut output));
+
+        loop {
+            match reader.read_event().unwrap() {
+                Event::Eof => break,
+                Event::Comment(_) | Event::Decl(_) | Event::PI(_) | Event::DocType(_) => {}
+                event => writer.write_event(event).unwrap(),
+            }
+        }
+
+        self.buffer = output;
+        self
+    }
+
     fn remove_elements_by_local_name(mut self, local_names: &[&str]) -> Self {
         let mut reader = Reader::from_reader(&self.buffer[..]);
         let mut output = Vec::new();
@@ -910,6 +927,22 @@ mod tests {
         let result = validate_xml_file(xml_path.to_str().unwrap());
         let err = result.err().expect("malformed xml should return an error");
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_tidy_removes_existing_declaration_before_save() {
+        let temp_dir = tempdir().unwrap();
+        let xml_path = temp_dir.path().join("decl.xml");
+        fs::write(
+            &xml_path,
+            r#"<?xml version="1.0" encoding="UTF-8"?><root><a>1</a></root>"#,
+        )
+        .unwrap();
+
+        OoxmlBuffer::new(xml_path.to_str().unwrap()).tidy().save();
+
+        let xml = fs::read_to_string(xml_path).unwrap();
+        assert_eq!(xml.matches("<?xml").count(), 1);
     }
 
     #[test]
