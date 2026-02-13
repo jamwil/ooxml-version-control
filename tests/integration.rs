@@ -271,6 +271,107 @@ fn test_check_in_out_and_validate_spec_with_docx_bundle() {
 }
 
 #[test]
+fn test_macro_binary_parts_are_passed_through_for_xlsm() {
+    let temp_dir = tempdir().unwrap();
+    let raw_dir = temp_dir.path().join("macro_book.xlsm_ooxml");
+    fs::create_dir_all(raw_dir.join("_rels")).unwrap();
+    fs::create_dir_all(raw_dir.join("xl/_rels")).unwrap();
+    fs::create_dir_all(raw_dir.join("xl/worksheets")).unwrap();
+
+    let vba_payload: Vec<u8> = vec![0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB2, 0x00, 0x42, 0x99, 0xFE];
+
+    fs::write(
+        raw_dir.join("[Content_Types].xml"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="bin" ContentType="application/vnd.ms-office.vbaProject"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.ms-excel.sheet.macroEnabled.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#,
+    )
+    .unwrap();
+    fs::write(
+        raw_dir.join("_rels/.rels"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#,
+    )
+    .unwrap();
+    fs::write(
+        raw_dir.join("xl/workbook.xml"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Sheet1" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>"#,
+    )
+    .unwrap();
+    fs::write(
+        raw_dir.join("xl/_rels/workbook.xml.rels"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rIdMacro" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/>
+</Relationships>"#,
+    )
+    .unwrap();
+    fs::write(
+        raw_dir.join("xl/worksheets/sheet1.xml"),
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1"><c r="A1" t="str"><v>macro</v></c></row>
+  </sheetData>
+</worksheet>"#,
+    )
+    .unwrap();
+    fs::write(raw_dir.join("xl/vbaProject.bin"), &vba_payload).unwrap();
+
+    let compiled_xlsm = temp_dir.path().join("macro_book.xlsm");
+    filesystem::zip(&raw_dir, &compiled_xlsm);
+
+    let mut check_in_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    check_in_cmd
+        .arg("check-in")
+        .arg(&compiled_xlsm)
+        .assert()
+        .success();
+
+    let checked_in_dir = temp_dir.path().join("macro_book.xlsm_ooxml");
+    assert!(checked_in_dir.is_dir());
+    let checked_in_vba = fs::read(checked_in_dir.join("xl/vbaProject.bin")).unwrap();
+    assert_eq!(checked_in_vba, vba_payload);
+
+    let mut validate_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    validate_cmd
+        .arg("validate")
+        .arg(&checked_in_dir)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("XML validation passed"));
+
+    if compiled_xlsm.exists() {
+        fs::remove_file(&compiled_xlsm).unwrap();
+    }
+    let mut check_out_cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    check_out_cmd
+        .arg("check-out")
+        .arg(&checked_in_dir)
+        .assert()
+        .success();
+
+    let rebuilt_dir = temp_dir.path().join("rebuilt_macro.xlsm_ooxml");
+    filesystem::unzip(&compiled_xlsm, &rebuilt_dir);
+    let rebuilt_vba = fs::read(rebuilt_dir.join("xl/vbaProject.bin")).unwrap();
+    assert_eq!(rebuilt_vba, vba_payload);
+}
+
+#[test]
 fn test_validate_with_valid_dir() {
     let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
     let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();

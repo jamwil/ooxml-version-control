@@ -47,3 +47,4 @@ ooxml-version-control git-install --repo . --force
 - Hooks call the same compiled binary path used during installation.
 - If hooks do not run, ensure they are executable and your git config allows local hooks.
 - Conversion commands require explicit paths.
+- Binary OOXML parts (for example macro payloads like `vbaProject.bin`) are passed through unchanged; validation only checks `.xml` and `.rels` parts.
