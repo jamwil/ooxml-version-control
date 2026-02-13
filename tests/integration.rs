@@ -199,6 +199,30 @@ fn test_check_out_with_output_container_path() {
 }
 
 #[test]
+fn test_check_out_with_output_container_path_creation_failure() {
+    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
+    let mut cmd = Command::cargo_bin("ocv").unwrap();
+
+    let temp_dir = tempdir().unwrap();
+    let test_folder_path = temp_dir.path().join("simple_book.xlsx_ooxml");
+    filesystem::copy_dir(&fixture, &test_folder_path);
+
+    // create_dir_all should fail when the target already exists as a regular file.
+    let output_container = temp_dir.path().join("compiled-file");
+    fs::write(&output_container, "not a directory").unwrap();
+
+    cmd.arg("check-out")
+        .arg("-o")
+        .arg(&output_container)
+        .arg(&test_folder_path)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Error: Failed to create output directory",
+        ));
+}
+
+#[test]
 fn test_check_in_with_output_container_and_multiple_inputs_succeeds() {
     let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx");
     let mut cmd = Command::cargo_bin("ocv").unwrap();

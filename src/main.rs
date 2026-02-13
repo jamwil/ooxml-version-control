@@ -513,6 +513,7 @@ fn uses_markup_compatibility_features(file_path: &Path) -> Result<bool, String> 
     )
 }
 
+#[cfg(feature = "spec-validation")]
 fn validate_path_spec(file_path: &Path, profile: SchemaProfile) -> Result<bool, String> {
     validate_xml_file(file_path.to_str().ok_or("non-utf8 xml path".to_string())?)
         .map_err(|err| err.to_string())?;
@@ -541,13 +542,16 @@ fn validate_path_spec(file_path: &Path, profile: SchemaProfile) -> Result<bool, 
     }
 }
 
-fn validate_paths(paths: &[PathBuf], mode: ValidationMode, profile: SchemaProfile) {
-    if mode == ValidationMode::Spec && !cfg!(feature = "spec-validation") {
-        panic!(
-            "Error: `validate --mode spec` requires the `spec-validation` feature. Rebuild with `cargo build --features spec-validation`."
-        );
-    }
+#[cfg(not(feature = "spec-validation"))]
+fn validate_path_spec(_file_path: &Path, _profile: SchemaProfile) -> Result<bool, String> {
+    Err(
+        "spec validation support is not enabled; rebuild with `--features spec-validation`"
+            .to_string(),
+    )
+}
 
+#[cfg(feature = "spec-validation")]
+fn validate_paths(paths: &[PathBuf], mode: ValidationMode, profile: SchemaProfile) {
     let mut targets: Vec<PathBuf> = paths.iter().flat_map(validation_targets_for_path).collect();
 
     if targets.is_empty() {
@@ -604,6 +608,42 @@ fn validate_paths(paths: &[PathBuf], mode: ValidationMode, profile: SchemaProfil
     } else {
         log::info!("XML validation passed");
     }
+}
+
+#[cfg(not(feature = "spec-validation"))]
+fn validate_paths(paths: &[PathBuf], mode: ValidationMode, _profile: SchemaProfile) {
+    if mode == ValidationMode::Spec {
+        panic!(
+            "Error: `validate --mode spec` requires the `spec-validation` feature. Rebuild with `cargo build --features spec-validation`."
+        );
+    }
+
+    let mut targets: Vec<PathBuf> = paths.iter().flat_map(validation_targets_for_path).collect();
+
+    if targets.is_empty() {
+        panic!("Error: No XML files found to validate");
+    }
+
+    targets.sort();
+    targets.dedup();
+
+    let mut invalid = vec![];
+    for target in targets {
+        let result = validate_xml_file(target.to_str().unwrap()).map_err(|err| err.to_string());
+        match result {
+            Ok(()) => log::debug!("Validated XML: {:?}", target),
+            Err(err) => {
+                log::error!("Invalid XML {:?}: {}", target, err);
+                invalid.push(target);
+            }
+        }
+    }
+
+    if !invalid.is_empty() {
+        panic!("Error: XML validation failed for {} file(s)", invalid.len());
+    }
+
+    log::info!("XML validation passed");
 }
 
 fn main() {
@@ -699,6 +739,19 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[cfg(not(feature = "spec-validation"))]
+    #[test]
+    fn test_validate_paths_spec_mode_panics_without_feature() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("ok.xml");
+        fs::write(&path, "<root/>").unwrap();
+
+        let result = panic::catch_unwind(|| {
+            validate_paths(&[path], ValidationMode::Spec, SchemaProfile::Transitional)
+        });
+        assert!(result.is_err());
+    }
+
     #[test]
     fn test_schema_for_namespace_transitional_main_parts() {
         assert_eq!(
@@ -721,6 +774,17 @@ mod tests {
                 SchemaProfile::Transitional
             ),
             Some("shared-documentPropertiesExtended.xsd")
+        );
+        assert_eq!(
+            schema_for_namespace(
+                "http://schemas.openxmlformats.org/officeDocument/2006/math",
+                SchemaProfile::Transitional
+            ),
+            Some("shared-math.xsd")
+        );
+        assert_eq!(
+            schema_for_namespace("urn:unknown-transitional", SchemaProfile::Transitional),
+            None
         );
     }
 
@@ -891,6 +955,11 @@ mod tests {
         fs::write(&parser_error, "<").unwrap();
         let ns = root_default_namespace(&parser_error).unwrap();
         assert!(ns.is_none());
+
+        let leading_text = temp.path().join("leading_text.xml");
+        fs::write(&leading_text, " \n<root xmlns='urn:text'/>").unwrap();
+        let ns = root_default_namespace(&leading_text).unwrap();
+        assert_eq!(ns.as_deref(), Some("urn:text"));
     }
 
     #[cfg(feature = "spec-validation")]
@@ -1130,6 +1199,34 @@ mod tests {
 
         let used_schema = validate_path_spec(&path, SchemaProfile::Transitional).unwrap();
         assert!(!used_schema);
+    }
+
+    #[cfg(not(feature = "spec-validation"))]
+    #[test]
+    fn test_validate_file_against_schema_returns_feature_error_without_spec_support() {
+        let temp = tempdir().unwrap();
+        let xml = temp.path().join("x.xml");
+        let xsd = temp.path().join("x.xsd");
+        fs::write(&xml, "<root/>").unwrap();
+        fs::write(&xsd, "<schema/>").unwrap();
+
+        let err = validate_file_against_schema(&xml, &xsd).unwrap_err();
+        assert!(err.contains("spec validation support is not enabled"));
+    }
+
+    #[cfg(not(feature = "spec-validation"))]
+    #[test]
+    fn test_validate_path_spec_returns_feature_error_without_spec_support() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("sheet.xml");
+        fs::write(
+            &path,
+            r#"<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>hello</t></si></sst>"#,
+        )
+        .unwrap();
+
+        let err = validate_path_spec(&path, SchemaProfile::Transitional).unwrap_err();
+        assert!(err.contains("spec validation support is not enabled"));
     }
 
     #[test]
