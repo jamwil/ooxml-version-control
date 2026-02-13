@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use env_logger::{self, Env};
 use ooxml_version_control::filesystem;
 use ooxml_version_control::ooxml::schemas::shared_strings;
-use ooxml_version_control::ooxml::{read_xml_file, OoxmlBuffer};
+use ooxml_version_control::ooxml::{read_xml_file, validate_xml_file, OoxmlBuffer};
 use std::collections::BTreeSet;
 use std::fs;
 use std::fs::remove_file;
@@ -55,6 +55,11 @@ enum Commands {
         /// Overwrite existing hooks
         #[arg(long)]
         force: bool,
+    },
+    /// Validate XML syntax for OOXML raw trees (.xml/.rels)
+    Validate {
+        /// Files and/or directories to validate
+        paths: Vec<PathBuf>,
     },
 }
 
@@ -333,6 +338,68 @@ fn git_install(repo: &PathBuf, force: bool) {
     install_hook(&hooks_dir.join("post-merge"), &post_merge, force);
 }
 
+fn validation_targets_for_path(path: &PathBuf) -> Vec<PathBuf> {
+    if path.is_file() {
+        let is_xml_like = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|ext| {
+                let lower = ext.to_ascii_lowercase();
+                lower == "xml" || lower == "rels"
+            })
+            .unwrap_or(false);
+
+        if !is_xml_like {
+            panic!(
+                "Error: File is not an XML-like OOXML part (.xml/.rels): {:?}",
+                path
+            );
+        }
+        return vec![path.clone()];
+    }
+
+    if path.is_dir() {
+        return filesystem::collect_files_by_extension(path, &["xml", "rels"]);
+    }
+
+    panic!("Error: Path does not exist or is not accessible: {:?}", path);
+}
+
+fn validate_paths(paths: &[PathBuf]) {
+    let mut targets: Vec<PathBuf> = if paths.is_empty() {
+        discover_tracked_ooxml_dirs(&PathBuf::from("."))
+            .into_iter()
+            .flat_map(|dir| filesystem::collect_files_by_extension(&dir, &["xml", "rels"]))
+            .collect()
+    } else {
+        paths.iter().flat_map(validation_targets_for_path).collect()
+    };
+
+    if targets.is_empty() {
+        panic!("Error: No XML files found to validate");
+    }
+
+    targets.sort();
+    targets.dedup();
+
+    let mut invalid = vec![];
+    for target in targets {
+        match validate_xml_file(target.to_str().unwrap()) {
+            Ok(()) => log::debug!("Validated XML: {:?}", target),
+            Err(err) => {
+                log::error!("Invalid XML {:?}: {}", target, err);
+                invalid.push(target);
+            }
+        }
+    }
+
+    if !invalid.is_empty() {
+        panic!("Error: XML validation failed for {} file(s)", invalid.len());
+    }
+
+    log::info!("XML validation passed");
+}
+
 fn main() {
     let env = Env::default().filter_or("MY_LOG_LEVEL", "info");
     env_logger::init_from_env(env);
@@ -354,6 +421,7 @@ fn main() {
         Commands::VcsIn { paths, stage } => vcs_in(paths, *stage),
         Commands::VcsOut { paths } => vcs_out(paths),
         Commands::GitInstall { repo, force } => git_install(repo, *force),
+        Commands::Validate { paths } => validate_paths(paths),
     }
 }
 
@@ -584,6 +652,15 @@ mod tests {
     }
 
     #[test]
+    fn test_discover_staged_xlsx_files_returns_empty_outside_repo() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().to_path_buf();
+
+        let files = discover_staged_xlsx_files(&root);
+        assert!(files.is_empty());
+    }
+
+    #[test]
     fn test_install_hook_skip_and_force() {
         let temp = tempdir().unwrap();
         let hook_path = temp.path().join("hook.sh");
@@ -597,5 +674,101 @@ mod tests {
         install_hook(&hook_path, "second\n", true);
         let content = fs::read_to_string(&hook_path).unwrap();
         assert_eq!(content, "second\n");
+    }
+
+    #[test]
+    fn test_validation_targets_for_xml_file() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("part.xml");
+        fs::write(&path, "<a/>").unwrap();
+
+        let targets = validation_targets_for_path(&path);
+        assert_eq!(targets, vec![path]);
+    }
+
+    #[test]
+    fn test_validation_targets_for_non_xml_file_panics() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("part.txt");
+        fs::write(&path, "x").unwrap();
+
+        let result = panic::catch_unwind(|| validation_targets_for_path(&path));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_paths_directory_success() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().to_path_buf();
+        fs::create_dir_all(root.join("xl")).unwrap();
+        fs::create_dir_all(root.join("xl/_rels")).unwrap();
+        fs::write(root.join("xl/workbook.xml"), "<workbook/>").unwrap();
+        fs::write(root.join("xl/_rels/workbook.xml.rels"), "<Relationships/>").unwrap();
+
+        validate_paths(&[root]);
+    }
+
+    #[test]
+    fn test_validate_paths_directory_failure_panics() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().to_path_buf();
+        fs::create_dir_all(root.join("xl")).unwrap();
+        fs::write(root.join("xl/workbook.xml"), "<workbook>").unwrap();
+
+        let result = panic::catch_unwind(|| validate_paths(&[root]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_paths_no_args_uses_tracked_ooxml_dirs() {
+        let _lock = lock_cwd();
+        let temp = tempdir().unwrap();
+        let root = temp.path().to_path_buf();
+        init_git_repo(&root);
+        let _guard = CwdGuard::to(&root);
+
+        let tracked_xml = root.join("book.xlsx_ooxml/xl/workbook.xml");
+        fs::create_dir_all(tracked_xml.parent().unwrap()).unwrap();
+        fs::write(&tracked_xml, "<workbook/>").unwrap();
+
+        assert!(Command::new("git")
+            .arg("add")
+            .arg("--all")
+            .current_dir(&root)
+            .status()
+            .unwrap()
+            .success());
+
+        validate_paths(&[]);
+    }
+
+    #[test]
+    fn test_validate_paths_no_args_panics_when_no_targets() {
+        let _lock = lock_cwd();
+        let temp = tempdir().unwrap();
+        let root = temp.path().to_path_buf();
+        let _guard = CwdGuard::to(&root);
+
+        let result = panic::catch_unwind(|| validate_paths(&[]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_xml_file_covers_open_close_and_parse_errors() {
+        let temp = tempdir().unwrap();
+
+        let ok_path = temp.path().join("ok.xml");
+        fs::write(&ok_path, "<root><child/></root>").unwrap();
+        assert!(validate_xml_file(ok_path.to_str().unwrap()).is_ok());
+
+        let bad_close = temp.path().join("bad_close.xml");
+        fs::write(&bad_close, "</root>").unwrap();
+        let err = validate_xml_file(bad_close.to_str().unwrap()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+
+        let unclosed = temp.path().join("unclosed.xml");
+        fs::write(&unclosed, "<root>").unwrap();
+        let err = validate_xml_file(unclosed.to_str().unwrap()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 }

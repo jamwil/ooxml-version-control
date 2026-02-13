@@ -118,6 +118,34 @@ pub fn read_xml_file<T: DeserializeOwned>(file_path: &str) -> Result<T, io::Erro
     from_reader(BufReader::new(file)).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
+pub fn validate_xml_file(file_path: &str) -> Result<(), io::Error> {
+    let file = File::open(file_path)?;
+    let mut reader = Reader::from_reader(BufReader::new(file));
+    reader.config_mut().trim_text(false);
+
+    let mut buf = Vec::new();
+    let mut depth = 0usize;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Eof) => break,
+            Ok(Event::Start(_)) => depth += 1,
+            Ok(Event::End(_)) => depth = depth.saturating_sub(1),
+            Ok(_) => {}
+            Err(err) => return Err(io::Error::new(io::ErrorKind::InvalidData, err)),
+        }
+        buf.clear();
+    }
+
+    if depth != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "unexpected EOF: unclosed XML element(s)",
+        ));
+    }
+
+    Ok(())
+}
+
 pub struct OoxmlBuffer {
     buffer: Vec<u8>,
     file_path: PathBuf,
@@ -878,6 +906,27 @@ mod tests {
         fs::write(&xml_path, "<root><value>missing end").unwrap();
 
         let result: Result<Root, io::Error> = read_xml_file(xml_path.to_str().unwrap());
+        let err = result.err().expect("malformed xml should return an error");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_validate_xml_file_success_path() {
+        let temp_dir = tempdir().unwrap();
+        let xml_path = temp_dir.path().join("root.xml");
+        fs::write(&xml_path, "<root><value>ok</value></root>").unwrap();
+
+        let result = validate_xml_file(xml_path.to_str().unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_xml_file_returns_invalid_data_for_malformed_xml() {
+        let temp_dir = tempdir().unwrap();
+        let xml_path = temp_dir.path().join("invalid.xml");
+        fs::write(&xml_path, "<root><value>missing end").unwrap();
+
+        let result = validate_xml_file(xml_path.to_str().unwrap());
         let err = result.err().expect("malformed xml should return an error");
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }

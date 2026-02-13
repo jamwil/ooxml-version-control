@@ -235,3 +235,37 @@ fn test_git_install_creates_hooks() {
     assert!(post_checkout.contains("vcs-out"));
     assert!(post_merge.contains("vcs-out"));
 }
+
+#[test]
+fn test_validate_with_valid_dir() {
+    let fixture = PathBuf::from("tests/fixtures/simple_book.xlsx_ooxml");
+    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+    let test_folder_path: PathBuf;
+
+    {
+        let temp_dir = tempdir().unwrap();
+        test_folder_path = temp_dir.path().join("simple_book.xlsx_ooxml");
+        filesystem::copy_dir(&fixture, &test_folder_path);
+
+        cmd.arg("validate")
+            .arg(&test_folder_path)
+            .assert()
+            .success()
+            .stderr(predicates::str::contains("XML validation passed"));
+    }
+}
+
+#[test]
+fn test_validate_with_invalid_xml_file() {
+    let mut cmd = Command::cargo_bin("ooxml-version-control").unwrap();
+
+    let temp_dir = tempdir().unwrap();
+    let invalid_file = temp_dir.path().join("broken.xml");
+    fs::write(&invalid_file, "<worksheet>").unwrap();
+
+    cmd.arg("validate")
+        .arg(&invalid_file)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("XML validation failed"));
+}

@@ -32,6 +32,10 @@ The repository can be configured so that:
   - If no paths are given, it discovers tracked `*_ooxml` trees via `git ls-files`.
 - `git-install [--repo <path>] [--force]`
   - Installs git hooks for automatic sync behavior.
+- `validate [paths...]`
+  - Strictly validates XML syntax for OOXML parts (`.xml` and `.rels`).
+  - Paths can be files or directories.
+  - If no paths are provided, it validates XML files under tracked `*_ooxml` trees.
 
 ## Hook Setup
 
