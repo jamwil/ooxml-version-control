@@ -39,7 +39,7 @@ enum Commands {
         /// Input raw OOXML tree directories
         #[arg(required = true)]
         paths: Vec<PathBuf>,
-        /// Explicit output compiled bundle file path (single input only)
+        /// Output container directory for generated compiled bundles
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
@@ -170,9 +170,10 @@ fn check_out_path(path: &PathBuf, output: Option<&PathBuf>) {
     let input_dir = path.file_name().unwrap().to_str().unwrap();
     log::debug!("Input dir: {:?}", input_dir);
 
+    let output_name = input_dir.to_string().replace("_ooxml", "");
     let output_file = output
-        .cloned()
-        .unwrap_or_else(|| path.with_file_name(input_dir.to_string().replace("_ooxml", "")));
+        .map(|container| container.join(&output_name))
+        .unwrap_or_else(|| path.with_file_name(output_name));
     log::debug!("File name: {:?}", output_file);
 
     filesystem::zip(&path, &output_file);
@@ -597,8 +598,13 @@ fn main() {
             }
         }
         Commands::CheckOut { paths, output } => {
-            if output.is_some() && paths.len() != 1 {
-                panic!("Error: --output/-o requires exactly one input path");
+            if let Some(output_dir) = output {
+                fs::create_dir_all(output_dir).unwrap_or_else(|err| {
+                    panic!(
+                        "Error: Failed to create output directory {:?}: {}",
+                        output_dir, err
+                    )
+                });
             }
             for path in paths {
                 check_out_path(path, output.as_ref());
