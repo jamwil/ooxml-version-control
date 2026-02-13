@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Diffable, mergeable version control for OOXML files (alpha software)."
 
+[features]
+default = []
+spec-validation = ["dep:libxml"]
+
 [[bin]]
 name = "ocv"
 path = "src/main.rs"
@@ -18,7 +22,7 @@ env_logger = "0.11.8"
 quick-xml = { version = "0.38.3", features = ["serialize"] }
 serde = { version = "1.0.219", features = ["derive"] }
 glob = "0.3.3"
-libxml = "0.3.8"
+libxml = { version = "0.3.8", optional = true }
 
 [patch.crates-io]
 quick-xml = { git = "https://github.com/jamwil/quick-xml.git", rev = "399d550536f6c74ec5e824b85cb44706a4fa0837" }

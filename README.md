@@ -41,3 +41,13 @@ ocv check-out -o path/to/build path/to/raw/my_bundle.xlsx_ooxml
 
 - Conversion commands require explicit paths.
 - Binary OOXML parts (for example macro payloads like `vbaProject.bin`) are passed through unchanged; validation only checks `.xml` and `.rels` parts.
+
+## Building on Windows
+
+- Default build (no native `libxml2` required):
+  - `cargo build`
+- OOXML spec schema validation (`validate --mode spec`) requires the optional `spec-validation` feature:
+  - `cargo build --features spec-validation`
+  - For MSVC targets, install libxml2 in vcpkg first:
+    - `vcpkg install libxml2:x64-windows`
+    - set `VCPKG_ROOT` to your vcpkg directory before building

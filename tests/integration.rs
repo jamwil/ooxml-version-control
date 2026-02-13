@@ -256,6 +256,7 @@ fn test_read_xml_file_from_integration_target() {
     assert_eq!(sst.si.len(), 2);
 }
 
+#[cfg(feature = "spec-validation")]
 #[test]
 fn test_check_in_out_and_validate_spec_with_docx_bundle() {
     let temp_dir = tempdir().unwrap();
@@ -473,6 +474,7 @@ fn test_validate_with_invalid_xml_file() {
         .stderr(predicates::str::contains("XML validation failed"));
 }
 
+#[cfg(feature = "spec-validation")]
 #[test]
 fn test_validate_spec_with_supported_part() {
     let mut cmd = Command::cargo_bin("ocv").unwrap();
@@ -489,6 +491,7 @@ fn test_validate_spec_with_supported_part() {
         .stderr(predicates::str::contains("OOXML spec validation passed"));
 }
 
+#[cfg(feature = "spec-validation")]
 #[test]
 fn test_validate_spec_with_fixture_dir() {
     let mut cmd = Command::cargo_bin("ocv").unwrap();

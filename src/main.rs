@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::{self, Env};
+#[cfg(feature = "spec-validation")]
 use libxml::schemas::{SchemaParserContext, SchemaValidationContext};
 use ooxml_version_control::filesystem;
 use ooxml_version_control::ooxml::schemas::shared_strings;
@@ -315,6 +316,7 @@ fn root_default_namespace(file_path: &Path) -> Result<Option<String>, io::Error>
     }
 }
 
+#[cfg(feature = "spec-validation")]
 fn structured_errors_to_string(errors: &[libxml::error::StructuredError]) -> String {
     errors
         .iter()
@@ -466,6 +468,7 @@ fn sanitize_xml_for_schema_validation(file_path: &Path) -> Result<tempfile::Name
     Ok(temp)
 }
 
+#[cfg(feature = "spec-validation")]
 fn validate_file_against_schema(xml_path: &Path, schema_path: &Path) -> Result<(), String> {
     let schema_str = schema_path
         .to_str()
@@ -483,6 +486,14 @@ fn validate_file_against_schema(xml_path: &Path, schema_path: &Path) -> Result<(
     validator
         .validate_file(xml_str)
         .map_err(|errs| structured_errors_to_string(&errs))
+}
+
+#[cfg(not(feature = "spec-validation"))]
+fn validate_file_against_schema(_xml_path: &Path, _schema_path: &Path) -> Result<(), String> {
+    Err(
+        "spec validation support is not enabled; rebuild with `--features spec-validation`"
+            .to_string(),
+    )
 }
 
 fn uses_markup_compatibility_features(file_path: &Path) -> Result<bool, String> {
@@ -526,6 +537,12 @@ fn validate_path_spec(file_path: &Path, profile: SchemaProfile) -> Result<bool, 
 }
 
 fn validate_paths(paths: &[PathBuf], mode: ValidationMode, profile: SchemaProfile) {
+    if mode == ValidationMode::Spec && !cfg!(feature = "spec-validation") {
+        panic!(
+            "Error: `validate --mode spec` requires the `spec-validation` feature. Rebuild with `cargo build --features spec-validation`."
+        );
+    }
+
     let mut targets: Vec<PathBuf> = paths.iter().flat_map(validation_targets_for_path).collect();
 
     if targets.is_empty() {
@@ -871,6 +888,7 @@ mod tests {
         assert!(ns.is_none());
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_structured_errors_to_string_location_variants() {
         use libxml::error::{StructuredError, XmlErrorLevel};
@@ -987,6 +1005,7 @@ mod tests {
         assert!(result.is_ok() || result.is_err());
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_file_against_schema_success_and_failure() {
         let temp = tempdir().unwrap();
@@ -1006,6 +1025,7 @@ mod tests {
         assert!(validate_file_against_schema(&bad, &schema).is_err());
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_file_against_schema_invalid_schema_returns_error() {
         let temp = tempdir().unwrap();
@@ -1032,6 +1052,7 @@ mod tests {
         assert!(!uses_markup_compatibility_features(&plain).unwrap());
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_path_spec_with_supported_namespace() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1040,6 +1061,7 @@ mod tests {
         assert!(used_schema);
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_path_spec_skips_mce_content() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1048,6 +1070,7 @@ mod tests {
         assert!(!used_schema);
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_path_spec_supported_namespace_skip_and_validate_paths() {
         let temp = tempdir().unwrap();
@@ -1071,6 +1094,7 @@ mod tests {
         assert!(used_schema);
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_path_spec_returns_err_on_schema_violation() {
         let temp = tempdir().unwrap();
@@ -1083,6 +1107,7 @@ mod tests {
         assert!(validate_path_spec(&invalid, SchemaProfile::Transitional).is_err());
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_path_spec_errors_on_malformed_xml() {
         let temp = tempdir().unwrap();
@@ -1091,6 +1116,7 @@ mod tests {
         assert!(validate_path_spec(&path, SchemaProfile::Transitional).is_err());
     }
 
+    #[cfg(feature = "spec-validation")]
     #[test]
     fn test_validate_path_spec_skips_unsupported_namespace() {
         let temp = tempdir().unwrap();
