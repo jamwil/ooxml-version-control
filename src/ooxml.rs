@@ -552,9 +552,29 @@ impl OoxmlBuffer {
             )))
             .unwrap();
 
+        // quick_xml's Reader splits text content at entity references (e.g.
+        // `&amp;`, `&lt;`) into separate Text and GeneralRef events.  The
+        // indenting Writer does not recognise GeneralRef as "text-like", so
+        // consecutive GeneralRef events (such as `&lt;&gt;`) cause spurious
+        // newlines and indentation to be inserted mid-content.  We work
+        // around this by re-emitting each GeneralRef as a Text event
+        // containing the original escaped entity (e.g. `&lt;`).  Entity
+        // reference names are always ASCII, so the UTF-8 conversion is safe.
         loop {
             match reader.read_event().unwrap() {
                 Event::Eof => break,
+                Event::GeneralRef(e) => {
+                    let ref_bytes = e.as_ref();
+                    let mut entity = Vec::with_capacity(ref_bytes.len() + 2);
+                    entity.push(b'&');
+                    entity.extend_from_slice(ref_bytes);
+                    entity.push(b';');
+                    writer
+                        .write_event(Event::Text(BytesText::from_escaped(
+                            std::str::from_utf8(&entity).unwrap(),
+                        )))
+                        .unwrap();
+                }
                 event => writer.write_event(event).unwrap(),
             }
         }
@@ -1057,5 +1077,35 @@ mod tests {
         assert!(!xml.contains("<nested>"));
         assert!(!xml.contains("<leaf/>"));
         assert!(!xml.contains("<AppVersion/>"));
+    }
+
+    #[test]
+    fn test_save_preserves_entity_references_in_text_content() {
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("formula.xml");
+        fs::write(
+            &path,
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="str" cm="1"><f t="array" ref="A1">_xlfn.LET(
+  _xlpm.n, SUM(--(_xlpm.names&lt;&gt;"")),
+  IF(_xlpm.n=0, "", _xlpm.conj &amp; " have")
+)</f><v/></c></row></sheetData></worksheet>"#,
+        )
+        .unwrap();
+
+        OoxmlBuffer::new(path.to_str().unwrap()).tidy().save();
+
+        let xml = fs::read_to_string(&path).unwrap();
+        // The &lt;&gt; entity pair must remain on the same line, not split
+        // by indentation inserted by the pretty-printing writer.
+        assert!(
+            xml.contains("_xlpm.names&lt;&gt;\"\""),
+            "entity references in text content were corrupted: {}",
+            xml
+        );
+        assert!(
+            xml.contains("_xlpm.conj &amp; \" have\""),
+            "&amp; in text content was corrupted: {}",
+            xml
+        );
     }
 }
