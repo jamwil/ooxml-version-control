@@ -13,7 +13,7 @@
       <color theme="1" />
       <name val="Calibri" />
       <family val="2" />
-      <scheme val="minor" />
+      <charset val="1" />
     </font>
     <font>
       <b />
@@ -21,7 +21,7 @@
       <color rgb="FFFA7D00" />
       <name val="Calibri" />
       <family val="2" />
-      <scheme val="minor" />
+      <charset val="1" />
     </font>
   </fonts>
   <fills count="3">
@@ -34,6 +34,7 @@
     <fill>
       <patternFill patternType="solid">
         <fgColor rgb="FFF2F2F2" />
+        <bgColor rgb="FFFFFFCC" />
       </patternFill>
     </fill>
   </fills>
@@ -63,22 +64,28 @@
   </borders>
   <cellStyleXfs count="2">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" />
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyProtection="0" />
+  </cellStyleXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
     <xf
       numFmtId="0"
       fontId="1"
       fillId="2"
       borderId="1"
-      applyNumberFormat="0"
-      applyAlignment="0"
-      applyProtection="0"
+      xfId="1"
+      applyFont="1"
+      applyBorder="1"
+      applyAlignment="1"
+      applyProtection="1"
     />
-  </cellStyleXfs>
-  <cellXfs count="2">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" />
-    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="1" />
   </cellXfs>
   <cellStyles count="2">
-    <cellStyle name="Calculation" xfId="1" builtinId="22" />
+    <cellStyle
+      name="Excel Built-in Calculation"
+      xfId="1"
+      xr:uid="{00000000-0005-0000-0000-000006000000}"
+    />
     <cellStyle name="Normal" xfId="0" builtinId="0" />
   </cellStyles>
   <dxfs count="0" />
@@ -87,6 +94,74 @@
     defaultTableStyle="TableStyleMedium2"
     defaultPivotStyle="PivotStyleLight16"
   />
+  <colors>
+    <indexedColors>
+      <rgbColor rgb="FF000000" />
+      <rgbColor rgb="FFF2F2F2" />
+      <rgbColor rgb="FFFF0000" />
+      <rgbColor rgb="FF00FF00" />
+      <rgbColor rgb="FF0000FF" />
+      <rgbColor rgb="FFFFFF00" />
+      <rgbColor rgb="FFFF00FF" />
+      <rgbColor rgb="FF00FFFF" />
+      <rgbColor rgb="FF800000" />
+      <rgbColor rgb="FF008000" />
+      <rgbColor rgb="FF000080" />
+      <rgbColor rgb="FF808000" />
+      <rgbColor rgb="FF800080" />
+      <rgbColor rgb="FF008080" />
+      <rgbColor rgb="FFC0C0C0" />
+      <rgbColor rgb="FF7F7F7F" />
+      <rgbColor rgb="FF9999FF" />
+      <rgbColor rgb="FF993366" />
+      <rgbColor rgb="FFFFFFCC" />
+      <rgbColor rgb="FFCCFFFF" />
+      <rgbColor rgb="FF660066" />
+      <rgbColor rgb="FFFF8080" />
+      <rgbColor rgb="FF0066CC" />
+      <rgbColor rgb="FFCCCCFF" />
+      <rgbColor rgb="FF000080" />
+      <rgbColor rgb="FFFF00FF" />
+      <rgbColor rgb="FFFFFF00" />
+      <rgbColor rgb="FF00FFFF" />
+      <rgbColor rgb="FF800080" />
+      <rgbColor rgb="FF800000" />
+      <rgbColor rgb="FF008080" />
+      <rgbColor rgb="FF0000FF" />
+      <rgbColor rgb="FF00CCFF" />
+      <rgbColor rgb="FFCCFFFF" />
+      <rgbColor rgb="FFCCFFCC" />
+      <rgbColor rgb="FFFFFF99" />
+      <rgbColor rgb="FF99CCFF" />
+      <rgbColor rgb="FFFF99CC" />
+      <rgbColor rgb="FFCC99FF" />
+      <rgbColor rgb="FFFFCC99" />
+      <rgbColor rgb="FF3366FF" />
+      <rgbColor rgb="FF33CCCC" />
+      <rgbColor rgb="FF99CC00" />
+      <rgbColor rgb="FFFFCC00" />
+      <rgbColor rgb="FFFF9900" />
+      <rgbColor rgb="FFFA7D00" />
+      <rgbColor rgb="FF666699" />
+      <rgbColor rgb="FF969696" />
+      <rgbColor rgb="FF003366" />
+      <rgbColor rgb="FF339966" />
+      <rgbColor rgb="FF003300" />
+      <rgbColor rgb="FF333300" />
+      <rgbColor rgb="FF993300" />
+      <rgbColor rgb="FF993366" />
+      <rgbColor rgb="FF333399" />
+      <rgbColor rgb="FF333333" />
+      <rgbColor rgb="00003366" />
+      <rgbColor rgb="00339966" />
+      <rgbColor rgb="00003300" />
+      <rgbColor rgb="00333300" />
+      <rgbColor rgb="00993300" />
+      <rgbColor rgb="00993366" />
+      <rgbColor rgb="00333399" />
+      <rgbColor rgb="00333333" />
+    </indexedColors>
+  </colors>
   <extLst>
     <ext
       uri="{EB79DEF2-80B8-43e5-95BD-54CBDDF9020C}"

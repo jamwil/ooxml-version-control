@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<sst
+  xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+  count="7"
+  uniqueCount="7"
+>
+  <si>
+    <t xml:space="preserve">Here</t>
+  </si>
+  <si>
+    <t xml:space="preserve">is</t>
+  </si>
+  <si>
+    <t xml:space="preserve">a</t>
+  </si>
+  <si>
+    <t xml:space="preserve">cell</t>
+  </si>
+  <si>
+    <t xml:space="preserve">with</t>
+  </si>
+  <si>
+    <t xml:space="preserve">some</t>
+  </si>
+  <si>
+    <r>
+      <rPr>
+        <b val="true" />
+        <sz val="10" />
+        <rFont val="Arial" />
+        <family val="2" />
+      </rPr>
+      <t xml:space="preserve">fun </t>
+    </r>
+    <r>
+      <rPr>
+        <i val="true" />
+        <sz val="10" />
+        <rFont val="Arial" />
+        <family val="2" />
+      </rPr>
+      <t xml:space="preserve">and</t>
+    </r>
+    <r>
+      <rPr>
+        <b val="true" />
+        <sz val="10" />
+        <rFont val="Arial" />
+        <family val="2" />
+      </rPr>
+      <t xml:space="preserve"> </t>
+    </r>
+    <r>
+      <rPr>
+        <u val="single" />
+        <sz val="10" />
+        <rFont val="Arial" />
+        <family val="2" />
+      </rPr>
+      <t xml:space="preserve">silly</t>
+    </r>
+    <r>
+      <rPr>
+        <sz val="10" />
+        <rFont val="Arial" />
+        <family val="2" />
+      </rPr>
+      <t xml:space="preserve"> </t>
+    </r>
+    <r>
+      <rPr>
+        <sz val="10" />
+        <color rgb="FF3FAF46" />
+        <rFont val="Arial" />
+        <family val="2" />
+      </rPr>
+      <t xml:space="preserve">formatting</t>
+    </r>
+  </si>
+</sst>

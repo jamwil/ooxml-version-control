@@ -8,27 +8,29 @@
   xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision"
   xmlns:xr2="http://schemas.microsoft.com/office/spreadsheetml/2015/revision2"
   xmlns:xr3="http://schemas.microsoft.com/office/spreadsheetml/2016/revision3"
-  xr:uid="{31806CBE-BBF2-44B0-8EB4-C9759A4E4D3C}"
+  xr:uid="{00000000-0001-0000-0000-000000000000}"
 >
   <dimension ref="A1:A3" />
   <sheetViews>
-    <sheetView tabSelected="1" workbookViewId="0">
-      <selection activeCell="B3" sqref="B3" />
-    </sheetView>
+    <sheetView tabSelected="1" zoomScaleNormal="100" workbookViewId="0" />
   </sheetViews>
-  <sheetFormatPr defaultRowHeight="15" x14ac:dyDescent="0.25" />
+  <sheetFormatPr
+    defaultColWidth="8.59765625"
+    defaultRowHeight="14.25"
+    x14ac:dyDescent="0.45"
+  />
   <sheetData>
-    <row r="1" spans="1:1" x14ac:dyDescent="0.25">
+    <row r="1" spans="1:1" x14ac:dyDescent="0.45">
       <c r="A1" t="s">
         <v>0</v>
       </c>
     </row>
-    <row r="2" spans="1:1" x14ac:dyDescent="0.25">
+    <row r="2" spans="1:1" x14ac:dyDescent="0.45">
       <c r="A2" t="s">
         <v>1</v>
       </c>
     </row>
-    <row r="3" spans="1:1" x14ac:dyDescent="0.25">
+    <row r="3" spans="1:1" x14ac:dyDescent="0.45">
       <c r="A3" s="1">
         <f>12*12</f>
         <v>144</v>
@@ -40,7 +42,8 @@
     right="0.7"
     top="0.75"
     bottom="0.75"
-    header="0.3"
-    footer="0.3"
+    header="0.511811023622047"
+    footer="0.511811023622047"
   />
+  <pageSetup orientation="portrait" horizontalDpi="300" verticalDpi="300" />
 </worksheet>

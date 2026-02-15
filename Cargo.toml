@@ -2,15 +2,32 @@
 name = "ooxml-version-control"
 version = "0.1.0"
 edition = "2021"
+description = "Diffable, mergeable version control for OOXML files (alpha software)."
+
+[features]
+default = []
+spec-validation = ["dep:libxml"]
+
+[[bin]]
+name = "ocv"
+path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.5.20", features = ["derive"] }
+clap = { version = "4.5.46", features = ["derive"] }
 walkdir = "2.5.0"
-zip = "2.2.0"
-tempfile = "3.13.0"
-log = "0.4.22"
-env_logger = "0.11.5"
+zip = "4.5.0"
+tempfile = "3.21.0"
+log = "0.4.27"
+env_logger = "0.11.8"
+quick-xml = { version = "0.38.3", features = ["serialize"] }
+serde = { version = "1.0.219", features = ["derive"] }
+glob = "0.3.3"
+libxml = { version = "0.3.8", optional = true }
+
+[patch.crates-io]
+quick-xml = { git = "https://github.com/jamwil/quick-xml.git", rev = "399d550536f6c74ec5e824b85cb44706a4fa0837" }
 
 [dev-dependencies]
-assert_cmd = "2.0.16"
-predicates = "3.1.2"
+assert_cmd = "2.0.17"
+predicates = "3.1.3"
+test-log = "0.2.18"
