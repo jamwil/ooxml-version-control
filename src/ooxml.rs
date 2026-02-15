@@ -13,7 +13,7 @@ pub mod schemas {
 
         #[derive(Serialize, Deserialize, Debug, Clone)]
         pub struct Text {
-            #[serde(rename = "$text")]
+            #[serde(rename = "$text", default)]
             pub text: String,
             #[serde(rename = "@xml:space")]
             pub xml_space: Option<String>,
@@ -51,9 +51,9 @@ pub mod schemas {
             #[serde(rename = "rFont", skip_serializing_if = "Option::is_none")]
             pub r_font: Option<Val>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            pub charset: Option<String>,
+            pub charset: Option<Val>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            pub family: Option<String>,
+            pub family: Option<Val>,
             #[serde(skip_serializing_if = "Option::is_none")]
             pub b: Option<BooleanProperty>,
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -531,6 +531,71 @@ impl OoxmlBuffer {
         self
     }
 
+    /// Replace the buffer with an empty `<calcChain>` root element,
+    /// preserving the original default namespace so the part stays valid.
+    pub fn clear_calc_chain(mut self) -> Self {
+        // Scan for the xmlns on the root element.
+        let mut reader = Reader::from_reader(&self.buffer[..]);
+        let mut xmlns = String::new();
+        loop {
+            match reader.read_event().unwrap() {
+                Event::Start(e) | Event::Empty(e) => {
+                    for attr in e.attributes().with_checks(false).flatten() {
+                        if attr.key.as_ref() == b"xmlns" {
+                            xmlns = attr.unescape_value().unwrap().into_owned();
+                        }
+                    }
+                    break;
+                }
+                Event::Eof => break,
+                _ => {}
+            }
+        }
+
+        let mut output = Vec::new();
+        let mut writer = Writer::new(Cursor::new(&mut output));
+        let mut root = BytesStart::new("calcChain");
+        if !xmlns.is_empty() {
+            root.push_attribute(("xmlns", xmlns.as_str()));
+        }
+        writer.write_event(Event::Empty(root)).unwrap();
+        self.buffer = output;
+        self
+    }
+
+    /// Replace the buffer with an empty `<sst>` root element (count="0",
+    /// uniqueCount="0"), preserving the original default namespace.
+    pub fn clear_shared_strings(mut self) -> Self {
+        let mut reader = Reader::from_reader(&self.buffer[..]);
+        let mut xmlns = String::new();
+        loop {
+            match reader.read_event().unwrap() {
+                Event::Start(e) | Event::Empty(e) => {
+                    for attr in e.attributes().with_checks(false).flatten() {
+                        if attr.key.as_ref() == b"xmlns" {
+                            xmlns = attr.unescape_value().unwrap().into_owned();
+                        }
+                    }
+                    break;
+                }
+                Event::Eof => break,
+                _ => {}
+            }
+        }
+
+        let mut output = Vec::new();
+        let mut writer = Writer::new(Cursor::new(&mut output));
+        let mut root = BytesStart::new("sst");
+        if !xmlns.is_empty() {
+            root.push_attribute(("xmlns", xmlns.as_str()));
+        }
+        root.push_attribute(("count", "0"));
+        root.push_attribute(("uniqueCount", "0"));
+        writer.write_event(Event::Empty(root)).unwrap();
+        self.buffer = output;
+        self
+    }
+
     pub fn remove_volatile_core_properties(self) -> Self {
         self.remove_elements_by_local_name(&["lastModifiedBy", "revision", "modified"])
     }
@@ -894,6 +959,50 @@ mod tests {
 
         let content_types = fs::read_to_string(output_file_path).unwrap();
         assert!(!content_types.contains("/xl/calcChain.xml"));
+    }
+
+    #[test]
+    fn test_clear_calc_chain_produces_empty_root_with_namespace() {
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("calcChain.xml");
+        fs::write(
+            &path,
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><c r="A1" i="1" l="1"/><c r="B2" i="1"/></calcChain>"#,
+        )
+        .unwrap();
+
+        OoxmlBuffer::new(path.to_str().unwrap())
+            .clear_calc_chain()
+            .save();
+
+        let xml = fs::read_to_string(&path).unwrap();
+        assert!(xml.contains("<calcChain"));
+        assert!(xml.contains("xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\""));
+        assert!(!xml.contains("<c "), "entries should be removed");
+        assert!(!xml.contains("r=\"A1\""));
+    }
+
+    #[test]
+    fn test_clear_shared_strings_produces_empty_sst_with_namespace() {
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("sharedStrings.xml");
+        fs::write(
+            &path,
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2"><si><t>Hello</t></si><si><t>World</t></si></sst>"#,
+        )
+        .unwrap();
+
+        OoxmlBuffer::new(path.to_str().unwrap())
+            .clear_shared_strings()
+            .save();
+
+        let xml = fs::read_to_string(&path).unwrap();
+        assert!(xml.contains("<sst"));
+        assert!(xml.contains("xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\""));
+        assert!(xml.contains("count=\"0\""));
+        assert!(xml.contains("uniqueCount=\"0\""));
+        assert!(!xml.contains("<si>"), "string items should be removed");
+        assert!(!xml.contains("Hello"));
     }
 
     #[test]

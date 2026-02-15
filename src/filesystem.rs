@@ -19,7 +19,8 @@ pub fn zip(input_dir: &PathBuf, output_file: &PathBuf) -> () {
     let file = File::create(output_file).unwrap();
     let mut writer = ZipWriter::new(file);
 
-    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let options =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     for entry in WalkDir::new(input_dir) {
         let entry = entry.unwrap();

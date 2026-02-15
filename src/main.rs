@@ -9,7 +9,6 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::{Reader, Writer};
 use std::collections::HashSet;
 use std::fs;
-use std::fs::remove_file;
 use std::io::{self, Cursor, Write};
 use std::path::{Path, PathBuf};
 use tempfile::tempdir;
@@ -91,17 +90,15 @@ fn check_in_path(path: &PathBuf, output: Option<&PathBuf>) {
 
     filesystem::unzip(&path, &work_dir);
 
-    // Drop the files we don't want to keep
-    let unwanted_files = vec!["xl/calcChain.xml"];
-    for unwanted_file in unwanted_files {
-        let unwanted_file_path = work_dir.join(unwanted_file);
-        if unwanted_file_path.exists() {
-            log::debug!("Removing unwanted file: {:?}", unwanted_file_path);
-            remove_file(unwanted_file_path).unwrap();
-        }
+    // Remove the calc chain entirely — Excel regenerates it on open and
+    // an empty stub triggers "Catastrophic failure" during repair.
+    let calc_chain = work_dir.join("xl/calcChain.xml");
+    if calc_chain.exists() {
+        log::debug!("Removing calc chain: {:?}", calc_chain);
+        fs::remove_file(&calc_chain).unwrap();
     }
 
-    // Keep package metadata consistent when calcChain is removed.
+    // Keep package metadata consistent with the removed calc chain.
     let workbook_rels = work_dir.join("xl/_rels/workbook.xml.rels");
     if workbook_rels.exists() {
         OoxmlBuffer::new(workbook_rels.to_str().unwrap())
@@ -150,6 +147,17 @@ fn check_in_path(path: &PathBuf, output: Option<&PathBuf>) {
         log::debug!("Inlining shared strings in worksheet: {:?}", xml_file);
         OoxmlBuffer::new(xml_file.to_str().unwrap())
             .inline_shared_strings(&sst)
+            .tidy()
+            .save();
+    }
+
+    // Clear the shared string table now that all strings have been inlined.
+    // The part and its relationships stay in place so Excel finds the
+    // expected package structure on check-out.
+    if ss_file.exists() {
+        log::debug!("Clearing shared strings: {:?}", ss_file);
+        OoxmlBuffer::new(ss_file.to_str().unwrap())
+            .clear_shared_strings()
             .tidy()
             .save();
     }
